@@ -78,6 +78,39 @@ icct_table_1 <- icct_table_1 |>
   dplyr::arrange(year)
 ```
 
+#### Column schema
+
+The scraped columns, their meaning, and units (derived from Table 1 and its
+notes in the ICCT brief [@seber2025]). "UCO-RD" is used-cooking-oil-based
+renewable diesel and "VO-RD" is vegetable-oil-based renewable diesel; the
+*-RD* volumes are the fuel produced, while the *UCO/VO demand* columns are the
+feedstock required to make it.
+
+```{r}
+#| label: icct-table-1-schema
+#| message: false
+#| warning: false
+
+icct_table_1_schema <- tibble::tribble(
+  ~column                           , ~description                                                                                     , ~units               ,
+  "year"                            , "Calendar year of the projection"                                                                , "year (2028–2035)"   ,
+  "shipping_energy_demand_ej"       , "Total international shipping energy demand (ships ≥5,000 GT; ICCT POLARIS model)"               , "EJ (exajoules)"     ,
+  "base_target_trajectory_gco2e_mj" , "Base target GHG fuel-intensity trajectory the blended fuel must meet in the Net-Zero Framework" , "g CO2e/MJ"          ,
+  "fossil_lng_pct"                  , "Fossil LNG share of shipping energy demand"                                                     , "% of energy demand" ,
+  "ucord_pct_energy_demand"         , "UCO-RD share of shipping energy demand"                                                         , "% of energy demand" ,
+  "ucord_billion_liters"            , "UCO-RD fuel volume blended into the fuel mix"                                                   , "billion liters"     ,
+  "vord_pct_energy_demand"          , "VO-RD share of shipping energy demand"                                                          , "% of energy demand" ,
+  "vord_billion_liters"             , "VO-RD fuel volume blended into the fuel mix"                                                    , "billion liters"     ,
+  "uco_demand_billion_liters"       , "Used cooking oil (UCO) feedstock demand to produce the UCO-RD"                                  , "billion liters"     ,
+  "vo_demand_billion_liters"        , "Virgin vegetable oil (VO) feedstock demand to produce the VO-RD"                                , "billion liters"
+)
+
+knitr::kable(
+  icct_table_1_schema,
+  col.names = c("Column", "Description", "Units")
+)
+```
+
 ```{r}
 #| label: icct-table-1-interactive
 #| message: false
@@ -92,7 +125,7 @@ DT::datatable(
 )
 ```
 
-The most important metric for our analysis is the projected demand for soy-based vegetable oil (to be used renewable biodiesel), in billion liters, across the 2028–2035 horizon. It is this projected demand of soy-based vegetable oil that we believe will lead to a direct price shock that can be used in our land use model. Here we look at a time series of this projected demand:
+The most important metric for our analysis is `vo_demand_billion_liters` (the projected soy-based virgin vegetable oil feedstock demand). It is this projected demand that we believe will most directly lead to a price shock that can be used in our land use model. Here we look at a time series of this projected demand:
 
 ```{r}
 #| label: icct-demand-timeseries
