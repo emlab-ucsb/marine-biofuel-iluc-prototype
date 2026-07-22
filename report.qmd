@@ -1,0 +1,36 @@
+---
+title: "Marine Biofuel ILUC Prototype"
+subtitle: "Analysis Report"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    code-fold: true
+    theme: cosmo
+    embed-resources: false
+---
+
+## Overview
+
+This report documents the marine biofuel indirect land use change (ILUC) prototype analysis.
+
+## Background
+
+Indirect land use change (ILUC) is a key factor in evaluating the lifecycle greenhouse gas emissions of biofuels. This prototype explores ILUC dynamics in the context of marine biofuel production.
+
+## Methods
+
+*Methods will be described here.*
+
+## Results
+
+*Results will be presented here.*
+
+## Discussion
+
+*Discussion of findings will go here.*
+
+## References
+
+*References will be listed here.*

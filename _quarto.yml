@@ -1,0 +1,15 @@
+project:
+  type: website
+  output-dir: _site
+
+website:
+  title: "Marine Biofuel ILUC Prototype"
+  navbar:
+    left:
+      - href: report.qmd
+        text: Report
+
+format:
+  html:
+    theme: cosmo
+    toc: true
