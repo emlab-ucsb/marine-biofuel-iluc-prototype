@@ -1,6 +1,7 @@
 ---
-title: "Marine Biofuel ILUC Prototype"
-subtitle: "Analysis Report"
+title: "Assessing the ILUC impliactions of increasing marine biodiesel demand"
+subtitle: "Prototype Proof-of-Concept Analyis"
+authors: Environmental Markets Lab (emLab) at University of California, Santa Barbara (UCSB). For International Council on Clean Transportation (ICCT)
 date: today
 format:
   html:
@@ -27,12 +28,8 @@ Indirect land use change (ILUC) is a key factor in evaluating the lifecycle gree
 
 ### ICCT Table 1: blend ratios and volumes
 
-The chunk below scrapes **Table 1** (page 5) of the ICCT research brief
-(*Estimating demand under the IMO Net-Zero Framework*) and reshapes it into a
-clean tibble. Each year appears on its own line in the extracted text, so we
-pull the numeric tokens per row and split the two compound columns
-("% energy demand / billion liters") into separate fields.
-
+The chunk below scrapes and tidies **Table 1** (page 5) of the ICCT research brief
+[Estimating the maximum potential vegetable oil demand for international shipping under the International Maritime Organization’s Net-Zero Framework](https://theicct.org/wp-content/uploads/2025/09/ID-450-Vegetable-Oil_research-brief_final.pdf). Table 1 from the report is called `UCO-RD and VO-RD blend ratios and volumes to comply with the base target emissions trajectory`
 ```{r}
 #| label: scrape-icct-table-1
 #| message: false
@@ -55,6 +52,9 @@ data_lines <- stringr::str_subset(lines, "^20(2[89]|3[0-5])\\b")
 # Each data row yields exactly 10 numeric tokens:
 #   year, shipping demand, base target, fossil LNG %,
 #   UCO-RD %, UCO-RD bl, VO-RD %, VO-RD bl, UCO demand bl, VO demand bl
+# Each year appears on its own line in the extracted text, so we
+#pull the numeric tokens per row and split the two compound columns
+# ("% energy demand / billion liters") into separate fields.
 nums <- stringr::str_extract_all(data_lines, "[0-9]+\\.?[0-9]*")
 mat <- do.call(rbind, lapply(nums, function(x) as.numeric(x[seq_len(10)])))
 
@@ -75,8 +75,6 @@ names(icct_table_1) <- c(
 icct_table_1 <- icct_table_1 |>
   dplyr::mutate(year = as.integer(year)) |>
   dplyr::arrange(year)
-
-icct_table_1
 ```
 
 ### Interactive table
