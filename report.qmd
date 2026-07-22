@@ -27,10 +27,10 @@ Indirect land use change (ILUC) is a key factor in evaluating the lifecycle gree
 
 ## Data sources
 
-### Projected marine biofuel demand from ICCT
+### Projected demand for soy-based vegetable oil (from ICCT)
 
-The chunk below scrapes and tidies **Table 1** (page 5) of the ICCT research brief
-[Estimating the maximum potential vegetable oil demand for international shipping under the International Maritime Organization’s Net-Zero Framework](https://theicct.org/wp-content/uploads/2025/09/ID-450-Vegetable-Oil_research-brief_final.pdf) [@seber2025].
+In the research brief
+[Estimating the maximum potential vegetable oil demand for international shipping under the International Maritime Organization’s Net-Zero Framework](https://theicct.org/wp-content/uploads/2025/09/ID-450-Vegetable-Oil_research-brief_final.pdf) [@seber2025], ICCT estimates the projected demand for marine renewable biodiesel (and the associated demand in vegatable oil) under the proposed IMO Net Zero Framework, from 2018 to 2035. This project demand is summarized in the report's **Table 1** (page 5). We scraped the PDF report and turned this into a data tibble for use in our analysis:
 ```{r}
 #| label: scrape-icct-table-1
 #| message: false
@@ -78,10 +78,6 @@ icct_table_1 <- icct_table_1 |>
   dplyr::arrange(year)
 ```
 
-#### Interactive table
-
-An interactive, sortable/searchable view of the scraped table.
-
 ```{r}
 #| label: icct-table-1-interactive
 #| message: false
@@ -91,15 +87,12 @@ DT::datatable(
   icct_table_1,
   rownames = FALSE,
   filter = "top",
-  caption = 'Caption from the ICCT report: "UCO-RD and VO-RD blend ratios and volumes to comply with the base target emissions trajectory"',
+  caption = 'Caption from the ICCT report: "UCO-RD and VO-RD blend ratios and volumes to comply with the base target emissions trajectory. Notes: UCO-based renewable diesel availability is used as a constraint, and the rest of the demand is assumed to come from soy oil-based renewable diesel. UCO and VO demand to reach the estimated renewable diesel volumes are included. Estimations for shipping energy demand for ships of ≥ 5,000 gross tonnage are from the ICCT’s POLARIS Mode"',
   options = list(pageLength = 10, scrollX = TRUE)
 )
 ```
 
-#### Interactive time series: biofuel demand
-
-Projected biofuel demand by feedstock (used cooking oil vs. vegetable oil),
-in billion liters, across the 2028–2035 horizon. Hover for values.
+The most important metric for our analysis is the projected demand for soy-based vegetable oil (to be used renewable biodiesel), in billion liters, across the 2028–2035 horizon. It is this projected demand of soy-based vegetable oil that we believe will lead to a direct price shock that can be used in our land use model. Here we look at a time series of this projected demand:
 
 ```{r}
 #| label: icct-demand-timeseries
@@ -109,16 +102,14 @@ in billion liters, across the 2028–2035 horizon. Hover for values.
 ts_data <- icct_table_1 |>
   dplyr::select(
     year,
-    uco_demand_billion_liters,
     vo_demand_billion_liters
   )
 
 dygraphs::dygraph(
   ts_data,
-  main = "Projected demand of soy-based biodiesel",
+  main = "Projected demand for soy-based vegetable oil",
   ylab = "Billion liters"
 ) |>
-  dygraphs::dySeries("uco_demand_billion_liters", label = "UCO demand") |>
   dygraphs::dySeries("vo_demand_billion_liters", label = "VO demand") |>
   dygraphs::dyOptions(strokeWidth = 2, drawPoints = TRUE, pointSize = 3) |>
   dygraphs::dyLegend(show = "always") |>
