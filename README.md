@@ -14,14 +14,15 @@ The report is automatically re-rendered and redeployed whenever changes to `repo
 ### R package management (renv)
 
 This project uses [`renv`](https://rstudio.github.io/renv/) to snapshot the exact R
-package versions used in the analysis, so everyone works from the same setup.
-The first time you open the project in Positron/R/RStudio, run:
+package versions used in the analysis in a lockfile, so that everyone works from the same setup.
+The first time you open the project in Positron/R/RStudio, ensure you have `renv` installed, then run the following:
 
 ```r
 renv::restore()
 ```
 
 This installs the required packages into a project-local library (from `renv.lock`).
+
 A few tips:
 
 - Restore is usually quick, since packages are pulled from a shared cache.
@@ -32,7 +33,7 @@ A few tips:
 
 ### Rendering the report locally
 
-To render the report locally, first install [Quarto](https://quarto.org/docs/get-started/). You can then either render the report using the built-in functionality of IDEs such as Positron or R Studio, or run:
+To render the report locally, first install [Quarto](https://quarto.org/docs/get-started/). You can then either render the report using the built-in functionality of IDEs such as Positron or R Studio, or run this in the terminal:
 
 ```bash
 quarto render
