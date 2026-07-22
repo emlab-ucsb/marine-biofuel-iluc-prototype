@@ -9,12 +9,34 @@ The rendered analysis report is hosted on GitHub Pages:
 
 The report is automatically re-rendered and redeployed whenever changes to `report.qmd` or `_quarto.yml` are pushed to the `main` branch.
 
-## Local Development
+## Running the analysis locally
 
-To render the report locally, install [Quarto](https://quarto.org/docs/get-started/) and run:
+### R package management (renv)
+
+This project uses [`renv`](https://rstudio.github.io/renv/) to snapshot the exact R
+package versions used in the analysis, so everyone works from the same setup.
+The first time you open the project in Positron/R/RStudio, run:
+
+```r
+renv::restore()
+```
+
+This installs the required packages into a project-local library (from `renv.lock`).
+A few tips:
+
+- Restore is usually quick, since packages are pulled from a shared cache.
+- If a package still isn't found, check that R/RStudio is using **R 4.6** (the
+  version this project is pinned to) — `renv` keeps a separate library per R version.
+- `pdftools` needs the system `poppler` library. On macOS: `brew install poppler`;
+  on Ubuntu/Debian: `sudo apt-get install libpoppler-cpp-dev`.
+
+### Rendering the report locally
+
+To render the report locally, first install [Quarto](https://quarto.org/docs/get-started/). You can then either render the report using the built-in functionality of IDEs such as Positron or R Studio, or run:
 
 ```bash
 quarto render
 ```
 
-The output will be written to `_site/`.
+The output will be written to `_site/`. Note that `_site/` is not tracked in git, since GitHub renders the report automatically using GitHub Actions each time  changes to `report.qmd` or `_quarto.yml` are pushed to the `main` branch.
+
