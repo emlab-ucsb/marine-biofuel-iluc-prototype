@@ -30,7 +30,7 @@ Indirect land use change (ILUC) is a key factor in evaluating the lifecycle gree
 ### Projected demand for soy-based vegetable oil (from ICCT)
 
 In the research brief
-[Estimating the maximum potential vegetable oil demand for international shipping under the International Maritime Organization’s Net-Zero Framework](https://theicct.org/wp-content/uploads/2025/09/ID-450-Vegetable-Oil_research-brief_final.pdf) [@seber2025], ICCT estimates the projected demand for marine renewable biodiesel (and the associated demand in vegatable oil) under the proposed IMO Net Zero Framework, from 2018 to 2035. This project demand is summarized in the report's **Table 1** (page 5). We scraped the PDF report and turned this into a data tibble for use in our analysis:
+[Estimating the maximum potential vegetable oil demand for international shipping under the International Maritime Organization’s Net-Zero Framework](https://theicct.org/wp-content/uploads/2025/09/ID-450-Vegetable-Oil_research-brief_final.pdf) [@seber2025], ICCT estimates the projected demand for marine renewable biodiesel (and the associated demand in used cooking oil feedstock, and virgin soy-based vegatable oil feedstock) under the proposed IMO Net Zero Framework, from 2018 to 2035. This project demand is summarized in the report's **Table 1** (page 5). We scraped the PDF report and turned this into a data tibble for use in our analysis:
 ```{r}
 #| label: scrape-icct-table-1
 #| message: false
@@ -140,7 +140,7 @@ ts_data <- icct_table_1 |>
 
 dygraphs::dygraph(
   ts_data,
-  main = "Projected demand for soy-based vegetable oil",
+  main = "Projected demand for soy-based vegetable oil virgin feedstock",
   ylab = "Billion liters"
 ) |>
   dygraphs::dySeries("vo_demand_billion_liters", label = "VO demand") |>
