@@ -1,5 +1,5 @@
 ---
-title: "Assessing the ILUC impliactions of increasing marine biodiesel demand"
+title: "Assessing the ILUC implications of increasing marine biofuel demand"
 subtitle: "Prototype Proof-of-Concept Analyis"
 authors: Environmental Markets Lab (emLab) at University of California, Santa Barbara (UCSB). For International Council on Clean Transportation (ICCT)
 date: today
@@ -10,11 +10,12 @@ format:
     code-fold: true
     theme: cosmo
     embed-resources: false
+bibliography: references.bib
 ---
 
 ## Overview
 
-This report documents the marine biofuel indirect land use change (ILUC) prototype analysis.
+This report documents a protype proof-of-concept analysis investigating the projected indirect land use change (ILUC) implications of increasing marine biofuel demand. This prototype is being done by Environmental Markets Lab (emLab) at University of California, Santa Barbara (UCSB) for International Council on Clean Transportation (ICCT). All results presented in this analysis should be considered exploratory and preliminary.
 
 ## Background
 
@@ -24,12 +25,12 @@ Indirect land use change (ILUC) is a key factor in evaluating the lifecycle gree
 
 *Methods will be described here.*
 
-## Results
+## Data sources
 
-### ICCT Table 1: blend ratios and volumes
+### Projected marine biofuel demand from ICCT
 
 The chunk below scrapes and tidies **Table 1** (page 5) of the ICCT research brief
-[Estimating the maximum potential vegetable oil demand for international shipping under the International Maritime Organization’s Net-Zero Framework](https://theicct.org/wp-content/uploads/2025/09/ID-450-Vegetable-Oil_research-brief_final.pdf). Table 1 from the report is called `UCO-RD and VO-RD blend ratios and volumes to comply with the base target emissions trajectory`
+[Estimating the maximum potential vegetable oil demand for international shipping under the International Maritime Organization’s Net-Zero Framework](https://theicct.org/wp-content/uploads/2025/09/ID-450-Vegetable-Oil_research-brief_final.pdf) [@seber2025].
 ```{r}
 #| label: scrape-icct-table-1
 #| message: false
@@ -77,7 +78,7 @@ icct_table_1 <- icct_table_1 |>
   dplyr::arrange(year)
 ```
 
-### Interactive table
+#### Interactive table
 
 An interactive, sortable/searchable view of the scraped table.
 
@@ -90,11 +91,12 @@ DT::datatable(
   icct_table_1,
   rownames = FALSE,
   filter = "top",
+  caption = 'Caption from the ICCT report: "UCO-RD and VO-RD blend ratios and volumes to comply with the base target emissions trajectory"',
   options = list(pageLength = 10, scrollX = TRUE)
 )
 ```
 
-### Interactive time series: biofuel demand
+#### Interactive time series: biofuel demand
 
 Projected biofuel demand by feedstock (used cooking oil vs. vegetable oil),
 in billion liters, across the 2028–2035 horizon. Hover for values.
@@ -123,10 +125,15 @@ dygraphs::dygraph(
   dygraphs::dyHighlight(highlightSeriesOpts = list(strokeWidth = 3))
 ```
 
+## Results
+
+*Results will go here.*
+
 ## Discussion
 
 *Discussion of findings will go here.*
 
 ## References
 
-*References will be listed here.*
+::: {#refs}
+:::
