@@ -1,6 +1,6 @@
 # marine-biofuel-iluc-prototype
 
-Analysis of marine biofuel indirect land use change (ILUC).
+This repository contains a report documenting a protype proof-of-concept analysis investigating the projected indirect land use change (ILUC) implications of increasing marine biofuel demand. This prototype is being done by Environmental Markets Lab (emLab) at University of California, Santa Barbara (UCSB) for International Council on Clean Transportation (ICCT). All results presented in this analysis should be considered exploratory and preliminary.
 
 ## Live Report
 
