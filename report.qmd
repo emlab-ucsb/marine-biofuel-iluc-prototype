@@ -1,6 +1,6 @@
 ---
 title: "Assessing the ILUC implications of increasing marine biofuel demand"
-subtitle: "Prototype Proof-of-Concept Analyis"
+subtitle: "Prototype Proof-of-Concept Analysis"
 authors: Environmental Markets Lab (emLab) at University of California, Santa Barbara (UCSB). For International Council on Clean Transportation (ICCT)
 date: today
 format:
@@ -15,19 +15,37 @@ bibliography: references.bib
 
 ## Overview
 
-This report documents a protype proof-of-concept analysis investigating the projected indirect land use change (ILUC) implications of increasing marine biofuel demand. This prototype is being done by Environmental Markets Lab (emLab) at University of California, Santa Barbara (UCSB) for International Council on Clean Transportation (ICCT). All results presented in this analysis should be considered exploratory and preliminary.
+This report documents a prototype proof-of-concept analysis investigating the projected indirect land use change (ILUC) implications of increasing marine biofuel demand. This prototype is being done by Environmental Markets Lab (emLab) at University of California, Santa Barbara (UCSB) for International Council on Clean Transportation (ICCT). All results presented in this analysis should be considered exploratory and preliminary.
 
 ## Background
 
-Indirect land use change (ILUC) is a key factor in evaluating the lifecycle greenhouse gas emissions of biofuels. This prototype explores ILUC dynamics in the context of marine biofuel production.
+Indirect land use change (ILUC) occurs when policy-induced demand for crop-based biofuel feedstocks raises agricultural commodity prices, and those higher prices induce the conversion of forest and other carbon-rich land to cropland elsewhere in the world. Because the carbon released by that conversion sits outside any fuel's direct supply chain, it is invisible to lifecycle accounting that stops at the refinery gate — yet it can rival or exceed the emissions of the fossil fuel being displaced. ILUC is therefore a key factor in evaluating the lifecycle greenhouse gas emissions of biofuels, and a central open question for the IMO Net-Zero Framework, whose current draft contains no ILUC safeguards.
+
+This prototype traces that causal chain for marine biofuels:
+
+```{mermaid}
+flowchart LR
+  A["IMO Net-Zero Framework<br/><i>policy</i>"] --> B["Marine vegetable-oil<br/>feedstock demand D<br/><i>ICCT projection</i>"]
+  B --> C["Vegetable-oil<br/>price shock %ΔP<br/><i>this report</i>"]
+  C --> D["ILUC area and<br/>carbon emissions<br/><i>our land-use model, next</i>"]
+```
 
 ### Literature review
 
-The following papers frame the policy context, the empirical link between biofuel demand and deforestation, and the economic methods relevant to this analysis. Highlights below are preliminary and will be refined.
+Four sources anchor the analysis, each supplying a different link in the chain above.
+
+| Source | Role in our pipeline | Key values we use |
+|---|---|---|
+| ICCT demand brief [@seber2025] | Projects the demand shock $D_t$ | 0 → 139 billion L virgin VO, 2028–2035 |
+| ICCT climate & revenue brief [@sturrup2026] | Benchmark fixed-factor translation of $D_t$ into ILUC emissions | 62 g CO₂e/MJ factor; ~950 Mt CO₂e cumulative |
+| Chen, Sexton & Smith [@chen2026] | Empirical demand → price → deforestation chain (the design we emulate) | Price multiplier $M \approx 2.6$; ILUC CI 84.1 g CO₂e/MJ |
+| Roberts & Schlenker [@roberts2013] | Identification strategy and elasticities for the demand → price step | $\varepsilon_s \approx 0.10$, $\varepsilon_d \approx -0.05$; $M \approx 6.7$ |
+
+: Roles of the four sources in our analysis pipeline.
 
 #### Estimating the maximum potential vegetable oil demand for international shipping under the IMO Net-Zero Framework [@seber2025]
 
-This brief estimates the *demand* for vegetable oil that the Net-Zero Framework could induce; it stops short of quantifying the resulting ILUC emissions, but it flags the ILUC risk and supplies the demand projection that our analysis (and the companion ICCT brief belw) build on.
+This brief estimates the *demand* for vegetable oil that the Net-Zero Framework could induce; it stops short of quantifying the resulting ILUC emissions, but it flags the ILUC risk and supplies the demand projection that our analysis (and the companion ICCT brief below) build on.
 
 - **Policy mechanism.** The Net-Zero Framework sets two annual greenhouse-gas fuel-intensity (GFI) targets against a 2008 baseline of 93.3 g CO₂e/MJ: a Base target (Tier 2 penalty of \$380/t CO₂e for exceeding it) and a stricter Direct Compliance target (Tier 1 penalty of \$100/t CO₂e between the two). The framework is technology-neutral and, as currently drafted, judges fuels only on direct life-cycle emissions — with **no ILUC safeguards** — creating the incentive to blend crop-based biofuels.
 - **How demand is derived (cost-optimization).** They build a least-cost sector-wide fuel mix from 2028 through 2035 in two steps: (1) fossil LNG is added exogenously (~0.81 EJ, ~8.1% of energy demand by 2035, from the POLARIS model); (2) biofuels are blended so the fleet-wide weighted-average carbon intensity just meets the Base target GFI, avoiding the \$380/t Tier 2 penalty. Because blending cost stays below \$380/t, the optimal strategy is to meet the Base target and pay only the Tier 1 penalty.
@@ -37,7 +55,7 @@ This brief estimates the *demand* for vegetable oil that the Net-Zero Framework 
 
 #### Climate and revenue considerations for the IMO Net-Zero Framework [@sturrup2026]
 
-Companion ICCT brief to the above that **takes the demand projection above and translates it into ILUC emissions** — the step most directly analogous to what our prototype analysis does. It examines two elements of the framework: biofuel use for compliance, and the climate finance raised from penalties.
+Companion ICCT brief that **takes the [@seber2025] demand projection and translates it into ILUC emissions** — the step most directly analogous to what our prototype analysis does. It examines two elements of the framework: biofuel use for compliance, and the climate finance raised from penalties.
 
 - **How demand becomes ILUC (their approach).** They take the Seber & Pavlenko [@seber2025] vegetable-oil demand path from Table 1, assume it is met with soy-RD, and apply a single illustrative **ILUC emission factor of 62 g CO₂e/MJ** drawn from the U.S. EPA's Model Comparison Exercise [@epa2023mce]. Because the blend is assumed to meet the Base target, they compute the true fuel carbon intensity by *adding* the soy-RD ILUC emissions on top of the Base-target GFI (i.e., ILUC-adjusted GFI = Base target GFI + ILUC contribution).
 - **Tracing the 62.** The value is the **land-use-change carbon intensity of soybean oil biodiesel from the GCAM model** in Table 7.7-1 of the EPA Model Comparison Exercise [@epa2023mce], where GCAM reports 62 (vs. ADAGE 295, GTAP 10, GLOBIOM 23, GREET 10). The exercise shocked soybean-biodiesel demand by 1 billion gallons/yr and ran it through five models; the wide spread reflects genuine ILUC uncertainty. Note a unit caveat: the EPA table reports 62 in **kg CO₂e/MMBTU** (≈ 59 g CO₂e/MJ), whereas the ICCT brief carries the bare figure across as 62 g CO₂e/MJ.
@@ -70,14 +88,36 @@ Provides the identification strategy and elasticity magnitudes for the price-res
 
 ## Methods
 
-*Methods will be described here.*
+### From demand projection to a vegetable-oil price shock
+
+Our land-use model requires a **price shock** — the proportional change in the vegetable-oil price attributable to new marine biofuel demand — as its input. We derive that shock from the ICCT projected demand series (`vo_demand_billion_liters`, see [Data sources](#data-sources)) using the standard comparative-statics result that an outward shift in demand moves the equilibrium price by the size of the shift divided by the gap between the supply and demand elasticities [@roberts2013]:
+
+$$ \%\Delta P_t \;\approx\; \underbrace{\frac{D_t}{Q_0}}_{\text{demand shift}} \;\times\; \underbrace{\frac{1}{\varepsilon_s - \varepsilon_d}}_{\text{price multiplier } M} $$
+
+where $D_t$ is the projected marine virgin vegetable-oil demand in year $t$ (billion L), $Q_0$ is baseline global vegetable-oil consumption (billion L), $\varepsilon_s > 0$ is the supply elasticity, and $\varepsilon_d < 0$ is the demand elasticity (so the denominator is $\varepsilon_s + |\varepsilon_d|$). The shock scales with demand *as a share of the whole market*, not with absolute volume.
+
+We source the elasticities from the two empirical references, which bracket the plausible range:
+
+- **Roberts & Schlenker [@roberts2013]** — inelastic staple-crop demand ($\varepsilon_d \approx -0.05$) with $\varepsilon_s \approx 0.10$, giving a large multiplier $M \approx 6.7$.
+- **Chen, Sexton & Smith [@chen2026]** — more elastic vegetable-oil demand ($\varepsilon_d \approx -0.29$, from their demand flexibility of ~3.5) with $\varepsilon_s \approx 0.10$, giving $M \approx 2.6$.
+
+The gap between the two is driven almost entirely by the demand elasticity: staple food is far less substitutable than vegetable oil, which trades as a fungible complex. Reassuringly, the same equation reproduces both papers' headline results — Chen's 8.5% market share × 2.6 ≈ 22% (their estimate: 21.2%) and Roberts & Schlenker's 5% caloric shift × 6.7 ≈ 33%, within their reported 29–39% range. These checks are reproduced in code alongside the results.
+
+Three modeling choices are worth flagging, and each is an explicit parameter in the computation below:
+
+- **Market definition.** Because vegetable oils are close substitutes, the shock is best modeled in the aggregate oil complex (with palm as the marginal price), even though the demand originates in soy [@chen2026]. We therefore set $Q_0$ to total global vegetable-oil consumption, not just the volume currently used for biofuels.
+- **Large-share breakdown.** The constant-elasticity approximation holds only for marginal shifts. As the ICCT demand grows past ~2032 it becomes a large fraction of the market, where the linear form overstates precision and the true price response is likely convex (accelerating) — consistent with the positively-skewed confidence interval in [@roberts2013] and the supply-insufficiency ICCT itself flags.
+- **Short- vs. long-run.** Oil palm is perennial (~4-year lag to fruit), so short-run supply is nearly fixed (larger price spike) and the long-run response is larger [@chen2026]. The elasticities above are long-run values.
+- **Soy co-product (meal) offset.** Crushing soybeans for oil jointly produces protein meal, whose revenue partially offsets the oil-price pressure — the vegetable-oil analogue of the distillers-grains adjustment in [@roberts2013], which scales their price effect by roughly two-thirds under full feed recycling. Chen et al. sidestep the issue by pricing the shock off palm, the marginal oil. We apply no co-product adjustment, so on this dimension our $\%\Delta P_t$ band should be read as an upper envelope.
+
+The steps downstream of $\%\Delta P_t$ — converting the price shock into ILUC area and emissions — are handled by our own land-use regression, to be developed next. The derived price-shock series is exported to `data/derived/vegetable_oil_price_shock.csv` for that step.
 
 ## Data sources
 
 ### Projected demand for soy-based vegetable oil (from ICCT)
 
 In the research brief
-[Estimating the maximum potential vegetable oil demand for international shipping under the International Maritime Organization’s Net-Zero Framework](https://theicct.org/wp-content/uploads/2025/09/ID-450-Vegetable-Oil_research-brief_final.pdf) [@seber2025], ICCT estimates the projected demand for marine renewable biodiesel (and the associated demand in used cooking oil feedstock, and virgin soy-based vegatable oil feedstock) under the proposed IMO Net Zero Framework, from 2018 to 2035. This project demand is summarized in the report's **Table 1** (page 5). We scraped the PDF report and turned this into a data tibble for use in our analysis:
+[Estimating the maximum potential vegetable oil demand for international shipping under the International Maritime Organization’s Net-Zero Framework](https://theicct.org/wp-content/uploads/2025/09/ID-450-Vegetable-Oil_research-brief_final.pdf) [@seber2025], ICCT estimates the projected demand for marine renewable biodiesel (and the associated demand for used cooking oil feedstock and virgin soy-based vegetable oil feedstock) under the proposed IMO Net-Zero Framework, from 2028 to 2035. This projected demand is summarized in the report's **Table 1** (page 5). We scraped the PDF report and turned this into a data tibble for use in our analysis:
 ```{r}
 #| label: scrape-icct-table-1
 #| message: false
@@ -198,7 +238,158 @@ dygraphs::dygraph(
 
 ## Results
 
-*Results will go here.*
+### Derived price shock
+
+Applying the demand-to-price mapping described in [Methods](#methods) to the ICCT projected demand series ([Data sources](#data-sources)) gives our first analytical output: the annual vegetable-oil price shock attributable to marine biofuel demand. Only two kinds of assumptions enter — the baseline market size $Q_0$ and the elasticity scenarios — and both are set explicitly here.
+
+```{r}
+#| label: price-shock-parameters
+#| message: false
+#| warning: false
+
+# --- Parameters (see Methods for sourcing and caveats) ---
+
+# Baseline global vegetable-oil consumption, billion liters.
+# ~225 Mt (USDA, major vegetable oils, 2023/24) at ~0.92 kg/L.
+q0_billion_liters <- 245
+
+# Elasticity scenarios. eps_d is negative, so the multiplier denominator
+# is eps_s + |eps_d|. The scenarios bracket the plausible demand response:
+# vegetable oil trades as a fungible complex (more elastic demand, smaller
+# price response) while staple food demand is very inelastic (larger one).
+eps_s_chen <- 0.10 # long-run oil-crop supply elasticity (Chen et al. 2026)
+eps_d_chen <- -0.29 # vegetable-oil demand elasticity (1 / 3.5 flexibility)
+eps_s_rs <- 0.10 # staple-crop supply elasticity (Roberts & Schlenker 2013)
+eps_d_rs <- -0.05 # staple-crop demand elasticity
+
+m_chen <- 1 / (eps_s_chen - eps_d_chen) # ~2.6
+m_rs <- 1 / (eps_s_rs - eps_d_rs) # ~6.7
+
+scenario_params <- tibble::tribble(
+  ~scenario, ~source,                                              ~eps_s,     ~eps_d,     ~multiplier,
+  "Low",     "Chen, Sexton & Smith (2026): vegetable-oil complex", eps_s_chen, eps_d_chen, m_chen,
+  "High",    "Roberts & Schlenker (2013): staple-food calories",   eps_s_rs,   eps_d_rs,   m_rs
+)
+
+knitr::kable(
+  scenario_params,
+  digits = 2,
+  col.names = c(
+    "Scenario", "Elasticity source",
+    "Supply elasticity (ε_s)", "Demand elasticity (ε_d)", "Multiplier M"
+  )
+)
+```
+
+As a consistency check, each multiplier should reproduce its source paper's own headline price effect when fed that paper's demand shock:
+
+```{r}
+#| label: price-shock-validation
+#| message: false
+#| warning: false
+
+validation <- tibble::tribble(
+  ~check,                                                        ~shock_pct, ~m,     ~reported,
+  "Chen et al.: BBD was 8.5% of vegetable-oil use, 2002-2018",   8.5,        m_chen, "21.2% (90% CI: 12.2-28.5%)",
+  "Roberts & Schlenker: ethanol mandate = 5% of world calories", 5.0,        m_rs,   "~30% (range 29-39%)"
+) |>
+  dplyr::mutate(implied_pct = round(shock_pct * m, 1)) |>
+  dplyr::select(check, shock_pct, implied_pct, reported)
+
+knitr::kable(
+  validation,
+  col.names = c(
+    "Validation case", "Demand shock (% of market)",
+    "Implied %ΔP (our formula)", "Paper's reported %ΔP"
+  )
+)
+```
+
+Both implied values fall within the source papers' reported ranges. We now apply the multipliers to the ICCT demand series:
+
+```{r}
+#| label: derive-price-shock
+#| message: false
+#| warning: false
+
+# %ΔP_t = (D_t / Q0) * M, expressed as a percent. The demand share is the
+# outward demand shift as a fraction of the whole vegetable-oil market.
+# beyond_marginal flags years where the shift exceeds ~25% of the market,
+# outside the regime where a constant-elasticity approximation is reliable.
+price_shock <- icct_table_1 |>
+  dplyr::transmute(
+    year,
+    vo_demand_billion_liters,
+    demand_share_pct = 100 * vo_demand_billion_liters / q0_billion_liters,
+    pct_delta_p_low = demand_share_pct * m_chen,
+    pct_delta_p_high = demand_share_pct * m_rs,
+    beyond_marginal = demand_share_pct > 25
+  )
+```
+
+```{r}
+#| label: price-shock-table
+#| message: false
+#| warning: false
+
+DT::datatable(
+  price_shock |>
+    dplyr::mutate(
+      dplyr::across(where(is.numeric), \(x) round(x, 1)),
+      beyond_marginal = ifelse(beyond_marginal, "yes", "")
+    ),
+  rownames = FALSE,
+  colnames = c(
+    "Year",
+    "VO demand (billion L)",
+    "Demand share of market (%)",
+    "%ΔP low (Chen, M≈2.6)",
+    "%ΔP high (Roberts-Schlenker, M≈6.7)",
+    "Beyond marginal regime"
+  ),
+  caption = "Projected vegetable-oil price shock attributable to marine biofuel demand. The low/high columns bracket the price response using the two elasticity scenarios. Years flagged 'beyond marginal regime' (demand share > 25% of the market, from ~2032) exceed the range where the constant-elasticity approximation is reliable; treat those values as indicative of direction and scale, not precise magnitudes.",
+  options = list(pageLength = 10, scrollX = TRUE, dom = "t")
+)
+```
+
+```{r}
+#| label: price-shock-timeseries
+#| message: false
+#| warning: false
+
+dygraphs::dygraph(
+  price_shock |> dplyr::select(year, pct_delta_p_low, pct_delta_p_high),
+  main = "Projected vegetable-oil price shock from marine biofuel demand",
+  ylab = "% change in vegetable oil price"
+) |>
+  dygraphs::dySeries(
+    "pct_delta_p_high",
+    label = "High (Roberts-Schlenker, M≈6.7)"
+  ) |>
+  dygraphs::dySeries("pct_delta_p_low", label = "Low (Chen, M≈2.6)") |>
+  dygraphs::dyShading(from = 2031.5, to = 2035.5) |>
+  dygraphs::dyOptions(strokeWidth = 2, drawPoints = TRUE, pointSize = 3) |>
+  dygraphs::dyLegend(show = "always") |>
+  dygraphs::dyHighlight(highlightSeriesOpts = list(strokeWidth = 3))
+```
+
+The shaded region (2032 onward) marks years where marine demand exceeds ~25% of the baseline vegetable-oil market — beyond the marginal regime, where the true price response is likely convex and these linear values understate it. Finally, we export the derived series for the downstream land-use step:
+
+```{r}
+#| label: export-price-shock
+#| message: false
+#| warning: false
+
+# Hand-off to the price -> ILUC regression (full precision, no rounding).
+dir.create(file.path("data", "derived"), showWarnings = FALSE, recursive = TRUE)
+utils::write.csv(
+  price_shock,
+  file.path("data", "derived", "vegetable_oil_price_shock.csv"),
+  row.names = FALSE
+)
+```
+
+The exported series (`pct_delta_p_low`, `pct_delta_p_high` in `data/derived/vegetable_oil_price_shock.csv`) is the input to the land-use step — converting the price shock into ILUC area and emissions — which we will develop next.
 
 ## Discussion
 
