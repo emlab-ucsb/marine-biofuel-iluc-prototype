@@ -15,11 +15,43 @@ bibliography: references.bib
 
 ## Overview
 
-This report documents a prototype proof-of-concept analysis investigating the projected indirect land use change (ILUC) implications of increasing marine biofuel demand. This prototype is being done by Environmental Markets Lab (emLab) at University of California, Santa Barbara (UCSB) for International Council on Clean Transportation (ICCT). All results presented in this analysis should be considered exploratory and preliminary.
+This report documents a prototype proof-of-concept analysis investigating the projected indirect land use change (ILUC) implications of the increasing marine biofuel demand that could be incentivized by the yet-to-be-approved IMO Net-Zero Framework. This prototype analysis is being developed by Environmental Markets Lab (emLab) at University of California, Santa Barbara (UCSB) for International Council on Clean Transportation (ICCT). All results presented in this analysis should be considered exploratory and preliminary.
 
 ## Background
 
-Indirect land use change (ILUC) occurs when demand for crop-based biofuel feedstocks raises agricultural commodity prices, and higher prices push cropland expansion into forest and other carbon-rich land elsewhere in the world. These emissions fall outside the fuel's direct supply chain, so lifecycle accounting that stops at the refinery gate misses them, even though they can rival or exceed the emissions of the fossil fuel being displaced. The current draft of the IMO Net-Zero Framework contains no ILUC safeguards, which makes this question directly relevant to marine fuel policy.
+### The IMO Net-Zero Framework
+
+At its 83rd session (April 2025), the International Maritime Organization (IMO) approved draft amendments to MARPOL Annex VI that, if adopted, would establish a legally binding Net-Zero Framework to decarbonize international shipping, with the goal of net-zero GHG emissions by or around 2050 [@seber2025; @sturrup2026]. The framework applies to all ships of 5,000 gross tonnage and above on international voyages. Each year, a ship reports its *attained* greenhouse-gas fuel intensity (GFI) — the average well-to-wake life-cycle emissions per unit of energy used on board, in grams of CO₂e per megajoule (g CO₂e/MJ) — and compares it against annual targets. A formal adoption vote slated for October 2025 was delayed by at least a year, so compliance may begin in 2029 rather than 2028.
+
+**Two-tier targets.** The framework sets two GFI targets, both defined as reductions from the 2008 fleet-average baseline of 93.3 g CO₂e/MJ, and both tightening every year:
+
+- A **Base target** (the less stringent tier), falling from a 4% reduction in 2028 (89.6 g CO₂e/MJ) to a 30% reduction by 2035 (65.3 g CO₂e/MJ), and set to reach a 65% reduction by 2040.
+- A stricter **Direct Compliance target**, falling from a 17% reduction in 2028 (77.4 g CO₂e/MJ) to a 43% reduction by 2035 (53.2 g CO₂e/MJ).
+
+**Carbon pricing.** A ship's position relative to these two thresholds determines what it pays for each tonne of excess CO₂e (a "compliance balance"):
+
+- Above the Base target → **Tier 2** penalty of **\$380/t CO₂e** (remedial units); banked surplus units from over-complying ships may be used instead.
+- Between the Direct Compliance and Base targets → reduced **Tier 1** penalty of **\$100/t CO₂e**, with no option to offset with surplus units.
+- Below the Direct Compliance target → the ship over-complies and earns tradable surplus units.
+
+**Fuel carbon intensities.** Because the framework judges fuels only on their life-cycle GFI, the compliance value of each fuel is set by how far its carbon intensity sits below the fossil incumbents. The values ICCT uses [@seber2025] illustrate the gap that makes crop-based biofuels attractive:
+
+| Fuel | Life-cycle carbon intensity (g CO₂e/MJ) |
+|---|---|
+| 2008 baseline | 93.3 |
+| Heavy fuel oil (HFO) | 92.8 |
+| Fossil LNG | 85.7 |
+| Soy vegetable-oil renewable diesel (VO-RD) | 42.3 |
+| Soy FAME biodiesel | 35.7 |
+| Used-cooking-oil renewable diesel (UCO-RD) | 13.1 |
+
+: Life-cycle (well-to-wake) carbon intensities used in the ICCT demand brief [@seber2025].
+
+**Why the framework incentivizes biofuel demand.** The framework contains no eligibility criteria for compliance fuels and evaluates them solely on life-cycle emissions; crucially, the underlying LCA guidelines are still in development and include no safeguards for land-use change or other indirect emissions. Blending low-carbon-intensity biofuel into an otherwise fossil fuel mix lowers a ship's attained GFI, and as long as the cost of that blending stays below the \$380/t Tier 2 penalty, the cost-minimizing strategy is to blend just enough biofuel to meet the Base target and pay only the cheaper \$100/t Tier 1 charge. ICCT's cost-optimization finds the cheapest pathway — used-cooking-oil renewable diesel — is quickly exhausted by limited supply (~13.6 billion L of fuel, about 5% of shipping energy demand), so virgin vegetable-oil renewable diesel absorbs the remaining compliance burden, growing to 46% of shipping energy demand by 2035 [@seber2025]. This is the demand shock our analysis traces.
+
+### The indirect land-use change concern
+
+Indirect land use change (ILUC) occurs when demand for crop-based biofuel feedstocks raises agricultural commodity prices, and higher prices push cropland expansion into forest and other carbon-rich land elsewhere in the world. These emissions fall outside the fuel's direct supply chain, so lifecycle accounting that stops at the refinery gate misses them, even though they can rival or exceed the emissions of the fossil fuel being displaced. Because the current draft of the Net-Zero Framework contains no ILUC safeguards, a fuel mix that is fully compliant on paper could carry substantial uncounted emissions — making this question directly relevant to marine fuel policy.
 
 Our analysis traces this chain for marine biofuels:
 
@@ -49,7 +81,7 @@ We draw on four sources, each covering a different link in the chain.
 This brief estimates how much vegetable oil demand the Net-Zero Framework could induce. It does not quantify the resulting ILUC emissions, but it flags the risk and provides the demand projection that our analysis and the companion brief below both build on.
 
 - **Policy mechanism.** The framework sets two annual greenhouse-gas fuel-intensity (GFI) targets against a 2008 baseline of 93.3 g CO₂e/MJ: a Base target, with a \$380/t CO₂e Tier 2 penalty for exceeding it, and a stricter Direct Compliance target, with a \$100/t Tier 1 penalty between the two. Fuels are judged only on their direct life-cycle emissions; there are no ILUC safeguards, so crop-based biofuels are an attractive compliance option.
-- **Demand derivation.** ICCT builds a least-cost sector-wide fuel mix for 2028–2035. Fossil LNG enters exogenously (0.81 EJ, about 8% of energy demand by 2035, from their POLARIS model), and biofuels are then blended until the fleet-wide average carbon intensity just meets the Base target. Since blending costs less than \$380/t, the cost-minimizing strategy is to meet the Base target and pay only the Tier 1 penalty.
+- **Demand derivation.** ICCT builds a least-cost sector-wide fuel mix for 2028–2035. Fossil LNG enters exogenously (0.81 EJ, about 8% of energy demand by 2035, from their POLARIS model [@polaris2024]), and biofuels are then blended until the fleet-wide average carbon intensity just meets the Base target. Since blending costs less than \$380/t, the cost-minimizing strategy is to meet the Base target and pay only the Tier 1 penalty.
 - **Feedstock logic.** The cheapest pathway, used-cooking-oil renewable diesel (UCO-RD, 13.1 g CO₂e/MJ), is blended first up to its supply limit; virgin vegetable-oil renewable diesel (soy-RD, 42.3 g CO₂e/MJ) fills the rest. UCO supply is the binding constraint — roughly 14.3 billion L of feedstock, or 13.6 billion L of fuel, covering only about 5% of shipping energy demand — so soy oil absorbs the remaining compliance burden.
 - **Key finding.** VO-RD grows to 46% of shipping energy demand by 2035, implying virgin vegetable-oil demand of up to 139 billion liters (Table 1, p. 5), roughly 3.5 times the 40 billion liters of vegetable oil used for biofuels today. ICCT judges existing virgin oil supply insufficient to meet the targets beyond 2032 without new cropland or diversion from other sectors.
 - **Use in this analysis.** We scrape Table 1 and use the `vo_demand_billion_liters` column as the demand shock for our land-use model (see [Data sources](#data-sources)).
@@ -267,17 +299,20 @@ m_chen <- 1 / (eps_s_chen - eps_d_chen) # ~2.6
 m_rs <- 1 / (eps_s_rs - eps_d_rs) # ~6.7
 
 scenario_params <- tibble::tribble(
-  ~scenario, ~source,                                              ~eps_s,     ~eps_d,     ~multiplier,
-  "Low",     "Chen, Sexton & Smith (2026): vegetable-oil complex", eps_s_chen, eps_d_chen, m_chen,
-  "High",    "Roberts & Schlenker (2013): staple-food calories",   eps_s_rs,   eps_d_rs,   m_rs
+  ~scenario , ~source                                              , ~eps_s     , ~eps_d     , ~multiplier ,
+  "Low"     , "Chen, Sexton & Smith (2026): vegetable-oil complex" , eps_s_chen , eps_d_chen , m_chen      ,
+  "High"    , "Roberts & Schlenker (2013): staple-food calories"   , eps_s_rs   , eps_d_rs   , m_rs
 )
 
 knitr::kable(
   scenario_params,
   digits = 2,
   col.names = c(
-    "Scenario", "Elasticity source",
-    "Supply elasticity (ε_s)", "Demand elasticity (ε_d)", "Multiplier M"
+    "Scenario",
+    "Elasticity source",
+    "Supply elasticity (ε_s)",
+    "Demand elasticity (ε_d)",
+    "Multiplier M"
   )
 )
 ```
@@ -290,9 +325,9 @@ Before applying the multipliers to our series, we check that each one recovers i
 #| warning: false
 
 validation <- tibble::tribble(
-  ~check,                                                        ~shock_pct, ~m,     ~reported,
-  "Chen et al.: BBD was 8.5% of vegetable-oil use, 2002-2018",   8.5,        m_chen, "21.2% (90% CI: 12.2-28.5%)",
-  "Roberts & Schlenker: ethanol mandate = 5% of world calories", 5.0,        m_rs,   "~30% (range 29-39%)"
+  ~check                                                        , ~shock_pct , ~m     , ~reported                    ,
+  "Chen et al.: BBD was 8.5% of vegetable-oil use, 2002-2018"   , 8.5        , m_chen , "21.2% (90% CI: 12.2-28.5%)" ,
+  "Roberts & Schlenker: ethanol mandate = 5% of world calories" , 5.0        , m_rs   , "~30% (range 29-39%)"
 ) |>
   dplyr::mutate(implied_pct = round(shock_pct * m, 1)) |>
   dplyr::select(check, shock_pct, implied_pct, reported)
@@ -300,8 +335,10 @@ validation <- tibble::tribble(
 knitr::kable(
   validation,
   col.names = c(
-    "Validation case", "Demand shock (% of market)",
-    "Implied %ΔP (our formula)", "Paper's reported %ΔP"
+    "Validation case",
+    "Demand shock (% of market)",
+    "Implied %ΔP (our formula)",
+    "Paper's reported %ΔP"
   )
 )
 ```
