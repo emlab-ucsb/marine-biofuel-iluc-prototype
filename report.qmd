@@ -143,7 +143,7 @@ A few modeling choices matter for interpretation:
 - **Short- vs. long-run.** Oil palm is a perennial with roughly a four-year lag to fruit, so short-run supply is nearly fixed and the long-run response is larger [@chen2026]. The elasticities above are long-run values.
 - **Soy co-product.** Crushing soybeans for oil also produces protein meal, and meal revenue partially offsets the oil-price pressure — the analogue of the distillers-grains adjustment in @roberts2013, which scales their price effect by roughly two-thirds under full feed recycling. Chen et al. avoid the issue by pricing the shock off palm. We apply no adjustment, so on this margin our estimates err high.
 
-Converting $\%\Delta P_t$ into ILUC area and emissions is the job of our own land-use regression, which we will develop next. The price-shock series is written to `data/derived/vegetable_oil_price_shock.csv` for that step.
+Converting $\%\Delta P_t$ into ILUC area and emissions will be estimated using our own land-use regression, which has already been developed. The price-shock series is written to `data/derived/vegetable_oil_price_shock.csv` for that step.
 
 ## Data sources
 
@@ -405,13 +405,12 @@ dygraphs::dygraph(
     label = "High (Roberts-Schlenker, M≈6.7)"
   ) |>
   dygraphs::dySeries("pct_delta_p_low", label = "Low (Chen, M≈2.6)") |>
-  dygraphs::dyShading(from = 2031.5, to = 2035.5) |>
   dygraphs::dyOptions(strokeWidth = 2, drawPoints = TRUE, pointSize = 3) |>
   dygraphs::dyLegend(show = "always") |>
   dygraphs::dyHighlight(highlightSeriesOpts = list(strokeWidth = 3))
 ```
 
-The shaded region (2032 on) marks years where marine demand exceeds a quarter of the baseline market. The linear approximation is unreliable there and, if anything, understates the true response. Last, we write the series out for the land-use step:
+From about 2032 on, marine demand becomes a large fraction of the baseline market, where the constant-elasticity approximation is unreliable and, if anything, understates the true response. Last, we save the timeseries as a CSV for the land-use step:
 
 ```{r}
 #| label: export-price-shock
