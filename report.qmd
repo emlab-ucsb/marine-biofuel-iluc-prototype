@@ -531,9 +531,10 @@ The 2035 demand share is far beyond the marginal regime, so the central shock sh
 Personal to-do list for wiring the price shock into the land-use model:
 
 - [ ] Fork the [land-based-solutions](https://github.com/emlab-ucsb/land-based-solutions) repo to a new repo, then focus only on the files in [r/robert_test/parallelization](https://github.com/emlab-ucsb/land-based-solutions/tree/main/r/robert_test/parallelization)
-- [ ] Modify the data prep script — the only place that needs changes: set the carbon price to 0 everywhere, and create 2 different crop price matrices (BAU vs. shocked)
 - [ ] Create a new Nextcloud folder for this project; copy in inputs from the parallelization directory (`1_input/full`)
 - [ ] Source packages and simulation functions
+- [ ] Modify `01_prepare_data.R` — the only script that needs changes: set the carbon price to 0 everywhere, and add a new input near the top of the script holding the scenario prices. Structure it as a vector of price vectors: the overarching vector has one element per scenario, and each scenario element is a price vector covering all of the different crop prices, adjusted from the baseline prices by whatever price shock that scenario applies (BAU = baseline, unshocked)
+- [ ] Once in the code and building the price matrices, check **which exact oils/crops the land-use model includes**, and confirm that list is consistent with the oils behind the Chen elasticities and our $Q_0$ (palm, soybean, rapeseed/canola, sunflower). If the model's crop list differs — e.g. it omits sunflower, or splits rapeseed and canola — decide whether to shock only the overlapping crops or to recompute $Q_0$ over the model's crop set, so the demand share and the shocked prices refer to the same market
 - [ ] Just to get things running: try no price shocks, no carbon price
 - [ ] Then shock vegetable oil prices (palm, soy, canola), all by 20%, just as a test
 - [ ] Then shock vegetable oil prices (palm, soy, canola), all by the exact % determined by our elasticities and demand (`pct_delta_p_central` in `data/derived/vegetable_oil_price_shock_2035.csv`)
