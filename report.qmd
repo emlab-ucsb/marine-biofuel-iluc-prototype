@@ -131,13 +131,14 @@ where $D_t$ is the projected marine virgin vegetable-oil demand in year $t$ (bil
 
 Our **central estimate** takes both elasticities from Chen, Sexton & Smith [@chen2026], since theirs is the empirical setting closest to ours (the vegetable-oil complex rather than staple-food calories):
 
-- **Demand.** The baseline demand flexibility from their Figure 2, panel A (row 1; Table S1, column 3) is $-3.523$ (90% CI: $[-5.3, -1.7]$): a 1% drop in aggregate oil-crop production raises palm oil prices 3.5%. Inverting gives $\varepsilon_d = 1/{-3.523} \approx -0.284$.
+- **Demand.** We use the baseline demand flexibility plotted in their Figure 2, panel A. That panel shows point estimates and 90% confidence intervals of the demand flexibility (the inverse demand elasticity, $\beta_1 = d\ln P / d\ln Q$); its first row, labeled "Aggregate oil crops" and shaded as the *Baseline* band, is the estimate we take. It comes from their two-stage least squares inverse-demand regression of the log December palm oil price on the log aggregate production of the four major oil crops (oil palm fruit, soybeans, rapeseed, sunflower), using annual FAO data for 1961–2022 ($N = 62$) with production instrumented by weather-driven yield shocks and a restricted-cubic-spline time trend (5 knots). The underlying coefficient is reported in their Table S1, column 3: $\beta_1 = -3.523$ (robust SE 1.085; 90% CI $[-5.3, -1.7]$) — a 1% drop in aggregate oil-crop production raises palm oil prices 3.5%. Because the flexibility is the reciprocal of the demand elasticity, $\varepsilon_d = 1/{-3.523} \approx -0.284$ (reported as $-0.28$ in their supplement).
 - **Supply.** Their long-run supply elasticities with respect to the palm price are ~0.10 for palm and ~0.13 for the competing oil crops, which they combine as a production-share-weighted average, $\varepsilon_s \approx 0.12$.
 
 Together these give a central multiplier $M = 1/(\varepsilon_s - \varepsilon_d) \approx 2.5$ — exactly the machinery Chen et al. use for their own counterfactual ($\%\Delta P = \%\Delta Q / (\varepsilon_s - \varepsilon_d)$). As a **sensitivity**, we retain the Roberts & Schlenker [@roberts2013] staple-food elasticities ($\varepsilon_s \approx 0.10$, $\varepsilon_d \approx -0.05$), whose much less elastic demand gives $M \approx 6.7$. As a check on the formula and our parameter choices, it recovers both papers' headline results: 8.5% × 2.5 ≈ 21% against Chen's reported 21.2%, and 5% × 6.7 ≈ 33% against Roberts & Schlenker's reported 29–39%. We repeat these checks in code with the results.
 
 A few modeling choices matter for interpretation:
 
+- **Why the supply elasticity stays in the formula.** Our land-use model also represents a supply response — land converting in reaction to prices — which raises the question of whether including $\varepsilon_s$ here double-counts it. It does not, because the two steps answer different questions: $\varepsilon_s$ in the multiplier determines *how much the price rises* given that producers expand supply, while the land-use model determines *where that expansion lands and what carbon it releases*. The land-use model takes prices as exogenous, so the price we hand it must already be an equilibrium price; dropping $\varepsilon_s$ (i.e., $M = 1/|\varepsilon_d| \approx 3.5$) would assume zero supply response in the price step while asking the land-use model to compute that very response, overstating the shock by roughly 40%. This mirrors Chen et al., whose 21.2% headline is likewise the equilibrium price ($8.5\% / 0.40$), not the pure demand-side flexibility ($8.5\% \times 3.5 \approx 30\%$), and whose deforestation regression is then run on that equilibrium price. The implicit assumption — that our land-use model's aggregate supply response is broadly consistent with $\varepsilon_s \approx 0.12$ — could be checked or iterated to a joint equilibrium in future work.
 - **Market definition.** Because vegetable oils are close substitutes, the shock plays out in the aggregate oil complex, with palm as the marginal price, even though the marine demand lands on soy [@chen2026]. We therefore set $Q_0$ to match the market over which the Chen elasticities are defined: global production of the four major oil crops (palm, soybean, rapeseed, sunflower). The USDA Production, Supply and Distribution (PSD) database puts 2024/25 world production of the four oils at about 204 Mt (palm 78.9, soybean 70.1, rapeseed 34.3, sunflowerseed 20.4) [@usdapsd] (see [Data sources](#data-sources)), about 221 billion liters at ~0.92 kg/L. (USDA's total across all nine tracked vegetable oils is ~231 Mt [@usda2025oilseeds]; using the four-oil complex keeps $Q_0$ consistent with the demand flexibility's denominator.)
 - **Single demand year.** The land-use model takes one price shock, not a time series. We use the final year of the ICCT projection (2035, virgin VO demand of 139 billion L) — the mature-policy year, when the framework's targets have tightened enough for VO-RD to carry most of the compliance burden. We still report the full 2028–2035 series for context.
 - **Large shocks.** The constant-elasticity approximation is a marginal result. From about 2032 the ICCT demand becomes a large fraction of the market, where the linear form loses reliability and the true price response is likely convex, consistent with the positively skewed confidence interval in @roberts2013 and with the supply shortfall ICCT itself flags.
@@ -319,7 +320,8 @@ knitr::kable(
   caption = paste0(
     "World production of the four major vegetable oils, summed from the ",
     "USDA PSD oilseeds dataset. Total: ",
-    round(sum(psd_four_oils$production_mt), 1), " million t."
+    round(sum(psd_four_oils$production_mt), 1),
+    " million t."
   )
 )
 ```
@@ -354,7 +356,8 @@ demand_flexibility_chen <- -3.523
 eps_d_chen <- 1 / demand_flexibility_chen
 share_palm <- psd_four_oils$production_mt[
   psd_four_oils$Commodity_Description == "Oil, Palm"
-] / q0_mt
+] /
+  q0_mt
 eps_s_chen <- 0.10 * share_palm + 0.13 * (1 - share_palm)
 
 # Sensitivity: Roberts & Schlenker (2013) staple-food elasticities, whose
@@ -522,6 +525,18 @@ The 2035 demand share is far beyond the marginal regime, so the central shock sh
 ## Discussion
 
 *Discussion of findings will go here.*
+
+## Next steps: land-use model checklist
+
+Personal to-do list for wiring the price shock into the land-use model:
+
+- [ ] Fork the [land-based-solutions](https://github.com/emlab-ucsb/land-based-solutions) repo to a new repo, then focus only on the files in [r/robert_test/parallelization](https://github.com/emlab-ucsb/land-based-solutions/tree/main/r/robert_test/parallelization)
+- [ ] Modify the data prep script — the only place that needs changes: set the carbon price to 0 everywhere, and create 2 different crop price matrices (BAU vs. shocked)
+- [ ] Create a new Nextcloud folder for this project; copy in inputs from the parallelization directory (`1_input/full`)
+- [ ] Source packages and simulation functions
+- [ ] Just to get things running: try no price shocks, no carbon price
+- [ ] Then shock vegetable oil prices (palm, soy, canola), all by 20%, just as a test
+- [ ] Then shock vegetable oil prices (palm, soy, canola), all by the exact % determined by our elasticities and demand (`pct_delta_p_central` in `data/derived/vegetable_oil_price_shock_2035.csv`)
 
 ## References
 
