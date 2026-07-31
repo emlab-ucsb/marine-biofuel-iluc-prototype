@@ -47,7 +47,9 @@ At its 83rd session (April 2025), the International Maritime Organization (IMO) 
 
 : Life-cycle (well-to-wake) carbon intensities used in the ICCT demand brief [@seber2025].
 
-**Why the framework incentivizes biofuel demand.** The framework contains no eligibility criteria for compliance fuels and evaluates them solely on life-cycle emissions; crucially, the underlying LCA guidelines are still in development and include no safeguards for land-use change or other indirect emissions. Blending low-carbon-intensity biofuel into an otherwise fossil fuel mix lowers a ship's attained GFI, and as long as the cost of that blending stays below the \$380/t Tier 2 penalty, the cost-minimizing strategy is to blend just enough biofuel to meet the Base target and pay only the cheaper \$100/t Tier 1 charge. ICCT's cost-optimization finds the cheapest pathway — used-cooking-oil renewable diesel — is quickly exhausted by limited supply (~13.6 billion L of fuel, about 5% of shipping energy demand), so virgin vegetable-oil renewable diesel absorbs the remaining compliance burden, growing to 46% of shipping energy demand by 2035 [@seber2025]. This is the demand shock our analysis traces.
+**Why FAME appears here but not downstream.** ICCT's own cost comparison (their Figure 1) ranks soy-FAME biodiesel as *cheaper* per tonne of CO₂ avoided than soy VO-RD — it has both the lower carbon intensity (35.74 g CO₂e/MJ) and the lower price (\$1,000–1,400/t versus \$1,255–1,535/t) — and FAME is the fuel behind essentially all marine biofuel blended commercially today, including the B24 grade sold in Singapore and the FAME-containing grades added in ISO 8217:2024. Their Table 1 nonetheless assigns the entire residual compliance volume to VO-RD, and we adopt that assumption so our demand series matches theirs. Because FAME's lower carbon intensity means less volume is needed for the same abatement, the choice is likely conservative for vegetable-oil demand; we quantify the difference in [Sensitivity: FAME instead of renewable diesel](#sensitivity-fame-instead-of-renewable-diesel).
+
+**Why the framework incentivizes biofuel demand.** The framework contains no eligibility criteria for compliance fuels and evaluates them solely on life-cycle emissions; crucially, the underlying LCA guidelines are still in development and include no safeguards for land-use change or other indirect emissions. Blending low-carbon-intensity biofuel into an otherwise fossil fuel mix lowers a ship's attained GFI, and as long as the cost of that blending stays below the \$380/t Tier 2 penalty, the cost-minimizing strategy is to blend just enough biofuel to meet the Base target and pay only the cheaper \$100/t Tier 1 charge. ICCT's cost-optimization finds the cheapest pathway — used-cooking-oil renewable diesel — is quickly exhausted by limited supply (~13.6 billion L of fuel, about 5% of shipping energy demand), so vegetable-oil renewable diesel absorbs the remaining compliance burden, growing to 46% of shipping energy demand by 2035 [@seber2025]. This is the demand shock our analysis traces.
 
 ### The indirect land-use change concern
 
@@ -142,6 +144,7 @@ A few modeling choices matter for interpretation:
 - **Large shocks.** The constant-elasticity approximation is a marginal result. From about 2032 the ICCT demand becomes a large fraction of the market, where the linear form loses reliability and the true price response is likely convex, consistent with the positively skewed confidence interval in @roberts2013 and with the supply shortfall ICCT itself flags.
 - **Short- vs. long-run.** Oil palm is a perennial with roughly a four-year lag to fruit, so short-run supply is nearly fixed and the long-run response is larger [@chen2026]. The elasticities above are long-run values.
 - **Soy co-product.** Crushing soybeans for oil also produces protein meal, and meal revenue partially offsets the oil-price pressure — the analogue of the distillers-grains adjustment in @roberts2013, which scales their price effect by roughly two-thirds under full feed recycling. Chen et al. avoid the issue by pricing the shock off palm. We apply no adjustment, so on this margin our estimates err high.
+- **Fuel pathway.** $D_t$ is the feedstock demand implied by ICCT's assumption that the residual compliance volume is renewable diesel. FAME biodiesel is the cheaper abatement option in ICCT's own ranking and the incumbent marine biofuel, and it would need less feedstock for the same abatement; we carry that alternative through as a sensitivity in [Results](#sensitivity-fame-instead-of-renewable-diesel) rather than in the headline series.
 
 Converting $\%\Delta P_t$ into ILUC area and emissions will be estimated using our own land-use regression, which has already been developed. The price-shock series is written to `data/derived/vegetable_oil_price_shock.csv` for that step.
 
@@ -410,7 +413,140 @@ dygraphs::dygraph(
   dygraphs::dyHighlight(highlightSeriesOpts = list(strokeWidth = 3))
 ```
 
-From about 2032 on, marine demand becomes a large fraction of the baseline market, where the constant-elasticity approximation is unreliable and, if anything, understates the true response. Last, we save the timeseries as a CSV for the land-use step:
+From about 2032 on, marine demand becomes a large fraction of the baseline market, where the constant-elasticity approximation is unreliable and, if anything, understates the true response.
+
+### Sensitivity: FAME instead of renewable diesel
+
+The demand series above inherits ICCT's assumption that the residual compliance volume is soy renewable diesel. As noted in [Background](#the-imo-net-zero-framework), soy-FAME biodiesel is cheaper per tonne abated in ICCT's own Figure 1 and is the fuel actually blended in the commercial marine market today, so it is worth asking how much vegetable oil the same compliance obligation would require if it were met with FAME.
+
+Two effects work in opposite directions:
+
+1. **Abatement efficiency.** Blending displaces heavy fuel oil, so each megajoule of biofuel abates $(CI_{HFO} - CI_{fuel})$ grams of CO₂e. Meeting the same base target needs fuel energy in inverse proportion to that gap, and FAME's lower carbon intensity means *less* energy is required.
+2. **Feedstock intensity per unit energy.** FAME needs less oil per tonne of fuel than renewable diesel — hydrotreating strips the oil's oxygen as water and cracks some carbon to light ends, while transesterification is close to mass-conserving on the oil side — but FAME also carries less energy per tonne. These nearly cancel.
+
+```{r}
+#| label: fame-sensitivity-parameters
+#| message: false
+#| warning: false
+
+# Carbon intensities and lower heating values from the notes to Equation 1
+# in the ICCT brief (Seber et al. 2025).
+ci_hfo <- 92.78 # g CO2e/MJ, heavy fuel oil
+ci_vord <- 42.3 # g CO2e/MJ, soy vegetable-oil renewable diesel (RED II)
+ci_fame <- 35.74 # g CO2e/MJ, soy FAME biodiesel
+lhv_vord <- 43980 # MJ per tonne of fuel
+lhv_fame <- 37841 # MJ per tonne of fuel
+
+# Feedstock intensity: tonnes of vegetable oil per tonne of finished fuel.
+# ICCT assume 1.22 for renewable diesel (their footnote 9). For FAME the
+# stoichiometry (triglyceride + 3 methanol -> 3 methyl esters + glycerol)
+# gives ~0.995, and commercial plants sit near 1.02 with process losses.
+# This is the only parameter here not taken from a cited source, so we carry
+# a low-high range through the calculation rather than a point value.
+oil_per_fuel_vord <- 1.22
+oil_per_fuel_fame <- 1.02
+oil_per_fuel_fame_lo <- 1.00
+oil_per_fuel_fame_hi <- 1.05
+```
+
+```{r}
+#| label: fame-sensitivity-factor
+#| message: false
+#| warning: false
+
+# (1) Energy needed for equal abatement, FAME relative to VO-RD.
+energy_ratio <- (ci_hfo - ci_vord) / (ci_hfo - ci_fame)
+
+# (2) Oil feedstock per MJ of fuel delivered, FAME relative to VO-RD.
+oil_kg_per_mj <- function(oil_per_fuel, lhv) 1000 * oil_per_fuel / lhv
+feedstock_ratio <- function(oil_per_fuel_f) {
+  oil_kg_per_mj(oil_per_fuel_f, lhv_fame) /
+    oil_kg_per_mj(oil_per_fuel_vord, lhv_vord)
+}
+
+# Combined multiplicative scaling on the ICCT vegetable-oil demand series.
+# Less oil per tonne of FAME means less feedstock, so the low-demand bound
+# pairs with oil_per_fuel_fame_lo and the high-demand bound with _hi.
+fame_scale <- energy_ratio * feedstock_ratio(oil_per_fuel_fame)
+fame_scale_lo <- energy_ratio * feedstock_ratio(oil_per_fuel_fame_lo)
+fame_scale_hi <- energy_ratio * feedstock_ratio(oil_per_fuel_fame_hi)
+
+stopifnot(fame_scale_lo <= fame_scale, fame_scale <= fame_scale_hi)
+
+fame_decomposition <- tibble::tribble(
+  ~component                                          , ~value                             ,
+  "Energy for equal abatement (FAME / VO-RD)"         , energy_ratio                       ,
+  "Oil feedstock per MJ (FAME / VO-RD), central"      , feedstock_ratio(oil_per_fuel_fame)  ,
+  "Combined scaling on VO demand, central (1.02)"     , fame_scale                          ,
+  "Combined scaling, low demand (1.00 t oil/t FAME)"  , fame_scale_lo                       ,
+  "Combined scaling, high demand (1.05 t oil/t FAME)" , fame_scale_hi
+)
+
+knitr::kable(
+  fame_decomposition,
+  digits = 3,
+  col.names = c("Component", "Ratio")
+)
+```
+
+```{r}
+#| label: fame-sensitivity-series
+#| message: false
+#| warning: false
+
+fame_sensitivity <- price_shock |>
+  dplyr::transmute(
+    year,
+    vo_demand_rd = vo_demand_billion_liters,
+    vo_demand_fame = vo_demand_billion_liters * fame_scale,
+    vo_demand_fame_lo = vo_demand_billion_liters * fame_scale_lo,
+    vo_demand_fame_hi = vo_demand_billion_liters * fame_scale_hi,
+    pct_delta_p_low_fame = 100 * vo_demand_fame / q0_billion_liters * m_chen,
+    pct_delta_p_high_fame = 100 * vo_demand_fame / q0_billion_liters * m_rs
+  )
+
+DT::datatable(
+  fame_sensitivity |>
+    dplyr::mutate(dplyr::across(where(is.numeric), \(x) round(x, 1))),
+  rownames = FALSE,
+  colnames = c(
+    "Year",
+    "VO demand, RD pathway (billion L)",
+    "VO demand, FAME pathway (billion L)",
+    "FAME low",
+    "FAME high",
+    "%ΔP low (Chen, M≈2.6)",
+    "%ΔP high (Roberts-Schlenker, M≈6.7)"
+  ),
+  caption = "Vegetable-oil feedstock demand and price shock if the residual compliance volume were met with soy-FAME biodiesel rather than soy renewable diesel. The FAME low/high columns reflect uncertainty in tonnes of oil per tonne of FAME (1.00 and 1.05 respectively).",
+  options = list(pageLength = 10, scrollX = TRUE, dom = "t")
+)
+```
+
+```{r}
+#| label: fame-sensitivity-comparison
+#| message: false
+#| warning: false
+#| output: asis
+
+fame_2035 <- fame_sensitivity |> dplyr::filter(year == max(year))
+
+glue::glue(
+  "In {fame_2035$year}, the RD pathway implies {round(fame_2035$vo_demand_rd, 1)} ",
+  "billion L of virgin vegetable oil; the FAME pathway implies ",
+  "{round(fame_2035$vo_demand_fame, 1)} billion L ",
+  "(range {round(fame_2035$vo_demand_fame_lo, 1)}-",
+  "{round(fame_2035$vo_demand_fame_hi, 1)}), a reduction of ",
+  "{round(100 * (1 - fame_scale), 1)}% ",
+  "({round(100 * (1 - fame_scale_hi), 1)}-{round(100 * (1 - fame_scale_lo), 1)}%)."
+)
+```
+
+The two effects combine to a scaling of roughly 0.86 on the demand series: a FAME pathway would need about **14% less vegetable oil** (range 12–16%) than ICCT's renewable-diesel pathway for the same compliance outcome, with the price shock and any downstream ILUC scaling proportionally. The abatement-efficiency term does nearly all the work; the feedstock term is within a few percent of unity.
+
+Two caveats on how far this can be pushed. First, it is a feedstock-accounting sensitivity applied to ICCT's published volumes, not a re-run of their cost optimization — a true FAME case would re-rank the fuels and could shift the UCO allocation as well. Second, marine FAME blending is currently capped well below the shares in ICCT's projection by oxidative-stability, cold-flow, and material-compatibility limits, so a pure FAME pathway is not a realistic 2035 scenario; the value of the comparison is in bounding how sensitive the headline demand is to a fuel-choice assumption the source brief does not defend. Both point the same way: ICCT's renewable-diesel assumption is mildly conservative for vegetable-oil demand, so we retain it for the headline series.
+
+Last, we save the timeseries as a CSV for the land-use step:
 
 ```{r}
 #| label: export-price-shock
