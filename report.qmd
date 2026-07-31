@@ -138,7 +138,7 @@ Together these give a central multiplier $M = 1/(\varepsilon_s - \varepsilon_d) 
 
 A few modeling choices matter for interpretation:
 
-- **Market definition.** Because vegetable oils are close substitutes, the shock plays out in the aggregate oil complex, with palm as the marginal price, even though the marine demand lands on soy [@chen2026]. We therefore set $Q_0$ to match the market over which the Chen elasticities are defined: global production of the four major oil crops (palm, soybean, rapeseed, sunflower). USDA's world supply-and-distribution tables put 2024/25 production of the four oils at 200.8 Mt (palm 78.3, soybean 68.6, rapeseed 33.9, sunflowerseed 20.1) [@usda2025oilseeds], about 218 billion liters at ~0.92 kg/L. (USDA's total across all nine tracked vegetable oils is ~231 Mt; using the four-oil complex keeps $Q_0$ consistent with the demand flexibility's denominator.)
+- **Market definition.** Because vegetable oils are close substitutes, the shock plays out in the aggregate oil complex, with palm as the marginal price, even though the marine demand lands on soy [@chen2026]. We therefore set $Q_0$ to match the market over which the Chen elasticities are defined: global production of the four major oil crops (palm, soybean, rapeseed, sunflower). The USDA Production, Supply and Distribution (PSD) database puts 2024/25 world production of the four oils at about 204 Mt (palm 78.9, soybean 70.1, rapeseed 34.3, sunflowerseed 20.4) [@usdapsd] (see [Data sources](#data-sources)), about 221 billion liters at ~0.92 kg/L. (USDA's total across all nine tracked vegetable oils is ~231 Mt [@usda2025oilseeds]; using the four-oil complex keeps $Q_0$ consistent with the demand flexibility's denominator.)
 - **Single demand year.** The land-use model takes one price shock, not a time series. We use the final year of the ICCT projection (2035, virgin VO demand of 139 billion L) — the mature-policy year, when the framework's targets have tightened enough for VO-RD to carry most of the compliance burden. We still report the full 2028–2035 series for context.
 - **Large shocks.** The constant-elasticity approximation is a marginal result. From about 2032 the ICCT demand becomes a large fraction of the market, where the linear form loses reliability and the true price response is likely convex, consistent with the positively skewed confidence interval in @roberts2013 and with the supply shortfall ICCT itself flags.
 - **Short- vs. long-run.** Oil palm is a perennial with roughly a four-year lag to fruit, so short-run supply is nearly fixed and the long-run response is larger [@chen2026]. The elasticities above are long-run values.
@@ -285,6 +285,45 @@ dygraphs::dygraph(
   dygraphs::dyHighlight(highlightSeriesOpts = list(strokeWidth = 3))
 ```
 
+### Baseline global vegetable-oil supply (from USDA PSD)
+
+The baseline market size $Q_0$ comes from the USDA Foreign Agricultural Service [Production, Supply and Distribution (PSD) database](https://apps.fas.usda.gov/psdonline/) [@usdapsd], the dataset behind the *Oilseeds: World Markets and Trade* circulars [@usda2025oilseeds]. We use the bulk-download oilseeds CSV (`data/usda_psd_oilseeds/psd_oilseeds_csv.zip`, retrieved 2026-07-31), which reports country-level supply and distribution by commodity and marketing year; world totals are sums across countries. We take world production of the four major oil crops over which the Chen et al. [@chen2026] elasticities are defined — palm, soybean, rapeseed, and sunflowerseed oil — for 2024/25, the most recent complete marketing year. (PSD estimates are continuously revised, so these values differ slightly from the printed May 2025 circular.)
+
+```{r}
+#| label: psd-q0
+#| message: false
+#| warning: false
+
+psd_zip_path <- file.path("data", "usda_psd_oilseeds", "psd_oilseeds_csv.zip")
+psd <- utils::read.csv(unz(psd_zip_path, "psd_oilseeds.csv"))
+
+q0_market_year <- 2024 # marketing year 2024/25
+
+psd_four_oils <- psd |>
+  dplyr::filter(
+    Commodity_Description %in%
+      c("Oil, Palm", "Oil, Soybean", "Oil, Rapeseed", "Oil, Sunflowerseed"),
+    Attribute_Description == "Production",
+    Market_Year == q0_market_year
+  ) |>
+  dplyr::summarise(
+    production_mt = sum(Value) / 1000, # reported in 1000 MT
+    .by = Commodity_Description
+  ) |>
+  dplyr::arrange(dplyr::desc(production_mt))
+
+knitr::kable(
+  psd_four_oils,
+  digits = 1,
+  col.names = c("Commodity", "World production, 2024/25 (million t)"),
+  caption = paste0(
+    "World production of the four major vegetable oils, summed from the ",
+    "USDA PSD oilseeds dataset. Total: ",
+    round(sum(psd_four_oils$production_mt), 1), " million t."
+  )
+)
+```
+
 ## Results
 
 ### Derived price shock
@@ -299,13 +338,12 @@ We now apply the mapping from [Methods](#methods) to the ICCT demand series to e
 # --- Parameters (see Methods for sourcing and caveats) ---
 
 # Baseline market size Q0: 2024/25 world production of the four major oil
-# crops over which the Chen et al. (2026) elasticities are defined
-# (USDA FAS, Oilseeds: World Markets and Trade, May 2025, world S&D
-# tables 16-19), converted to billion liters at ~0.92 kg/L.
-production_mt <- c(palm = 78.25, soybean = 68.57, rapeseed = 33.90, sunflower = 20.08)
-q0_mt <- sum(production_mt) # 200.8 Mt
+# crops over which the Chen et al. (2026) elasticities are defined, summed
+# from the USDA PSD dataset (psd_four_oils, see Data sources), converted
+# to billion liters at ~0.92 kg/L.
+q0_mt <- sum(psd_four_oils$production_mt) # ~204 Mt
 oil_density_kg_l <- 0.92
-q0_billion_liters <- q0_mt / oil_density_kg_l # ~218 billion L
+q0_billion_liters <- q0_mt / oil_density_kg_l # ~221 billion L
 
 # Central elasticities (Chen et al. 2026). Demand: baseline demand
 # flexibility of -3.523 (Figure 2A row 1 / Table S1 col 3; 90% CI
@@ -314,7 +352,9 @@ q0_billion_liters <- q0_mt / oil_density_kg_l # ~218 billion L
 # combined as a production-share-weighted average per their eps_S formula.
 demand_flexibility_chen <- -3.523
 eps_d_chen <- 1 / demand_flexibility_chen
-share_palm <- production_mt[["palm"]] / q0_mt
+share_palm <- psd_four_oils$production_mt[
+  psd_four_oils$Commodity_Description == "Oil, Palm"
+] / q0_mt
 eps_s_chen <- 0.10 * share_palm + 0.13 * (1 - share_palm)
 
 # Sensitivity: Roberts & Schlenker (2013) staple-food elasticities, whose
