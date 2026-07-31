@@ -65,13 +65,13 @@ flowchart LR
 
 ### Literature review
 
-We draw on four sources, each covering a different link in the chain.
+We draw on four primary sources, each covering a different link in the chain. Two further sources on how price shocks transmit across the different vegetable oils [@cui2017; @santeramo2017] are discussed in [Methods](#a-common-price-shock-across-oils).
 
 | Source | Role in our pipeline | Key values we use |
 |---|---|---|
 | ICCT demand brief [@seber2025] | Projects the demand shock $D_t$ | 0 → 139 billion L virgin VO, 2028–2035 |
 | ICCT climate & revenue brief [@sturrup2026] | Benchmark fixed-factor translation of $D_t$ into ILUC emissions | 62 g CO₂e/MJ factor; ~950 Mt CO₂e cumulative |
-| Chen, Sexton & Smith [@chen2026] | Empirical demand → price → deforestation chain (the design we emulate) | Price multiplier $M \approx 2.6$; ILUC CI 84.1 g CO₂e/MJ |
+| Chen, Sexton & Smith [@chen2026] | Empirical demand → price → deforestation chain (the design we emulate) | Demand flexibility $-3.5$; price multiplier $M \approx 2.5$; ILUC CI 84.1 g CO₂e/MJ |
 | Roberts & Schlenker [@roberts2013] | Identification strategy and elasticities for the demand → price step | $\varepsilon_s \approx 0.10$, $\varepsilon_d \approx -0.05$; $M \approx 6.7$ |
 
 : Roles of the four sources in our analysis pipeline.
@@ -129,21 +129,37 @@ $$ \%\Delta P_t \;\approx\; \underbrace{\frac{D_t}{Q_0}}_{\text{demand shift}} \
 
 where $D_t$ is the projected marine virgin vegetable-oil demand in year $t$ (billion L), $Q_0$ is baseline global vegetable-oil consumption (billion L), $\varepsilon_s > 0$ is the supply elasticity, and $\varepsilon_d < 0$ is the demand elasticity (so the denominator is $\varepsilon_s + |\varepsilon_d|$). The shock depends on demand as a share of the whole market, not on absolute volume.
 
-We take elasticities from the two empirical papers, which bracket the plausible range:
+Our **central estimate** takes both elasticities from Chen, Sexton & Smith [@chen2026], since theirs is the empirical setting closest to ours (the vegetable-oil complex rather than staple-food calories):
 
-- **Roberts & Schlenker [@roberts2013]** — inelastic staple-crop demand ($\varepsilon_d \approx -0.05$) with $\varepsilon_s \approx 0.10$, giving a large multiplier $M \approx 6.7$.
-- **Chen, Sexton & Smith [@chen2026]** — more elastic vegetable-oil demand ($\varepsilon_d \approx -0.29$, from their demand flexibility of ~3.5) with $\varepsilon_s \approx 0.10$, giving $M \approx 2.6$.
+- **Demand.** The baseline demand flexibility from their Figure 2, panel A (row 1; Table S1, column 3) is $-3.523$ (90% CI: $[-5.3, -1.7]$): a 1% drop in aggregate oil-crop production raises palm oil prices 3.5%. Inverting gives $\varepsilon_d = 1/{-3.523} \approx -0.284$.
+- **Supply.** Their long-run supply elasticities with respect to the palm price are ~0.10 for palm and ~0.13 for the competing oil crops, which they combine as a production-share-weighted average, $\varepsilon_s \approx 0.12$.
 
-The difference between the two comes almost entirely from the demand side: staple food demand is much less elastic than vegetable-oil demand, since the oils trade as a fungible complex. As a check on the formula and our parameter choices, it recovers both papers' headline results: 8.5% × 2.6 ≈ 22% against Chen's reported 21.2%, and 5% × 6.7 ≈ 33% against Roberts & Schlenker's reported 29–39%. We repeat these checks in code with the results.
+Together these give a central multiplier $M = 1/(\varepsilon_s - \varepsilon_d) \approx 2.5$ — exactly the machinery Chen et al. use for their own counterfactual ($\%\Delta P = \%\Delta Q / (\varepsilon_s - \varepsilon_d)$). As a **sensitivity**, we retain the Roberts & Schlenker [@roberts2013] staple-food elasticities ($\varepsilon_s \approx 0.10$, $\varepsilon_d \approx -0.05$), whose much less elastic demand gives $M \approx 6.7$. As a check on the formula and our parameter choices, it recovers both papers' headline results: 8.5% × 2.5 ≈ 21% against Chen's reported 21.2%, and 5% × 6.7 ≈ 33% against Roberts & Schlenker's reported 29–39%. We repeat these checks in code with the results.
 
 A few modeling choices matter for interpretation:
 
-- **Market definition.** Because vegetable oils are close substitutes, the shock plays out in the aggregate oil complex, with palm as the marginal price, even though the marine demand lands on soy [@chen2026]. We therefore set $Q_0$ to total global vegetable-oil consumption rather than the volume currently used for biofuels.
+- **Market definition.** Because vegetable oils are close substitutes, the shock plays out in the aggregate oil complex, with palm as the marginal price, even though the marine demand lands on soy [@chen2026]. We therefore set $Q_0$ to match the market over which the Chen elasticities are defined: global production of the four major oil crops (palm, soybean, rapeseed, sunflower). USDA's world supply-and-distribution tables put 2024/25 production of the four oils at 200.8 Mt (palm 78.3, soybean 68.6, rapeseed 33.9, sunflowerseed 20.1) [@usda2025oilseeds], about 218 billion liters at ~0.92 kg/L. (USDA's total across all nine tracked vegetable oils is ~231 Mt; using the four-oil complex keeps $Q_0$ consistent with the demand flexibility's denominator.)
+- **Single demand year.** The land-use model takes one price shock, not a time series. We use the final year of the ICCT projection (2035, virgin VO demand of 139 billion L) — the mature-policy year, when the framework's targets have tightened enough for VO-RD to carry most of the compliance burden. We still report the full 2028–2035 series for context.
 - **Large shocks.** The constant-elasticity approximation is a marginal result. From about 2032 the ICCT demand becomes a large fraction of the market, where the linear form loses reliability and the true price response is likely convex, consistent with the positively skewed confidence interval in @roberts2013 and with the supply shortfall ICCT itself flags.
 - **Short- vs. long-run.** Oil palm is a perennial with roughly a four-year lag to fruit, so short-run supply is nearly fixed and the long-run response is larger [@chen2026]. The elasticities above are long-run values.
 - **Soy co-product.** Crushing soybeans for oil also produces protein meal, and meal revenue partially offsets the oil-price pressure — the analogue of the distillers-grains adjustment in @roberts2013, which scales their price effect by roughly two-thirds under full feed recycling. Chen et al. avoid the issue by pricing the shock off palm. We apply no adjustment, so on this margin our estimates err high.
 
-Converting $\%\Delta P_t$ into ILUC area and emissions will be estimated using our own land-use regression, which has already been developed. The price-shock series is written to `data/derived/vegetable_oil_price_shock.csv` for that step.
+### A common price shock across oils {#a-common-price-shock-across-oils}
+
+The formula above yields a single percentage price shock, but our land-use model takes crop-specific price matrices. Following Chen, Sexton & Smith [@chen2026], we apply the **same percentage shock to each vegetable-oil crop price** (palm, soy, canola). Their model carries only one price — everything is denominated in the palm price, and a demand shock landing on any oil is expressed as a share of the combined four-oil quantity — and they support this "one market, one price" treatment empirically: palm prices respond to production shocks in competing oil crops about as strongly as to palm's own (their Figure 2A), and the four oil prices are cointegrated with near-unit long-run coefficients (soybean 1.04, canola 1.01, sunflower 0.86; their Table S5), meaning proportional shocks transmit roughly one-for-one across oils.
+
+Studies that model the oils as separate markets find transmission that is real but partial and heterogeneous — Cui & Martin [@cui2017] and an ICCT consultant report on cross-price elasticities [@santeramo2017] — so relaxing the uniform-shock assumption with oil-specific pass-through is a potential refinement for future work.
+
+### From price shock to ILUC carbon intensity
+
+Converting $\%\Delta P$ into ILUC area and emissions uses our land-use model (developed separately), which regresses land conversion on crop prices and simulates forward by country. The hand-off works as follows:
+
+1. **Two scenarios.** A business-as-usual run with baseline crop prices, and a marine-demand run in which the vegetable-oil crop prices (palm, soy, canola) are raised by the common percentage shock derived here. The model's carbon price is set to zero in both scenarios, so the difference between runs isolates the price-driven land-use response.
+2. **Differencing and annualization.** Differencing the two runs gives the additional land-use-change emissions attributable to marine biofuel demand, annualized over the 150-year simulation horizon.
+3. **Carbon intensity.** Dividing annualized emissions by the annual fuel energy delivered (MJ of VO-RD in the 2035 demand year) yields an ILUC carbon intensity in g CO₂e/MJ, directly comparable to — and addable to — the direct carbon intensity ICCT assumes for soy VO-RD (42.3 g CO₂e/MJ [@seber2025]).
+4. **Country decomposition.** Because the model resolves land conversion by country, the ILUC intensity decomposes into country contributions (e.g., a stacked bar chart), showing where the induced conversion falls.
+
+The 2035 price shock is written to `data/derived/vegetable_oil_price_shock_2035.csv` (and the full series to `data/derived/vegetable_oil_price_shock.csv`) for that step.
 
 ## Data sources
 
@@ -282,26 +298,38 @@ We now apply the mapping from [Methods](#methods) to the ICCT demand series to e
 
 # --- Parameters (see Methods for sourcing and caveats) ---
 
-# Baseline global vegetable-oil consumption, billion liters.
-# ~225 Mt (USDA, major vegetable oils, 2023/24) at ~0.92 kg/L.
-q0_billion_liters <- 245
+# Baseline market size Q0: 2024/25 world production of the four major oil
+# crops over which the Chen et al. (2026) elasticities are defined
+# (USDA FAS, Oilseeds: World Markets and Trade, May 2025, world S&D
+# tables 16-19), converted to billion liters at ~0.92 kg/L.
+production_mt <- c(palm = 78.25, soybean = 68.57, rapeseed = 33.90, sunflower = 20.08)
+q0_mt <- sum(production_mt) # 200.8 Mt
+oil_density_kg_l <- 0.92
+q0_billion_liters <- q0_mt / oil_density_kg_l # ~218 billion L
 
-# Elasticity scenarios. eps_d is negative, so the multiplier denominator
-# is eps_s + |eps_d|. The scenarios bracket the plausible demand response:
-# vegetable oil trades as a fungible complex (more elastic demand, smaller
-# price response) while staple food demand is very inelastic (larger one).
-eps_s_chen <- 0.10 # long-run oil-crop supply elasticity (Chen et al. 2026)
-eps_d_chen <- -0.29 # vegetable-oil demand elasticity (1 / 3.5 flexibility)
-eps_s_rs <- 0.10 # staple-crop supply elasticity (Roberts & Schlenker 2013)
-eps_d_rs <- -0.05 # staple-crop demand elasticity
+# Central elasticities (Chen et al. 2026). Demand: baseline demand
+# flexibility of -3.523 (Figure 2A row 1 / Table S1 col 3; 90% CI
+# [-5.3, -1.7]) inverts to eps_d = -0.284. Supply: long-run elasticities
+# w.r.t. the palm price of ~0.10 (palm) and ~0.13 (competing oil crops),
+# combined as a production-share-weighted average per their eps_S formula.
+demand_flexibility_chen <- -3.523
+eps_d_chen <- 1 / demand_flexibility_chen
+share_palm <- production_mt[["palm"]] / q0_mt
+eps_s_chen <- 0.10 * share_palm + 0.13 * (1 - share_palm)
 
-m_chen <- 1 / (eps_s_chen - eps_d_chen) # ~2.6
+# Sensitivity: Roberts & Schlenker (2013) staple-food elasticities, whose
+# much less elastic demand gives a larger multiplier.
+eps_s_rs <- 0.10
+eps_d_rs <- -0.05
+
+# eps_d is negative, so the multiplier denominator is eps_s + |eps_d|.
+m_chen <- 1 / (eps_s_chen - eps_d_chen) # ~2.5
 m_rs <- 1 / (eps_s_rs - eps_d_rs) # ~6.7
 
 scenario_params <- tibble::tribble(
-  ~scenario , ~source                                              , ~eps_s     , ~eps_d     , ~multiplier ,
-  "Low"     , "Chen, Sexton & Smith (2026): vegetable-oil complex" , eps_s_chen , eps_d_chen , m_chen      ,
-  "High"    , "Roberts & Schlenker (2013): staple-food calories"   , eps_s_rs   , eps_d_rs   , m_rs
+  ~scenario     , ~source                                              , ~eps_s     , ~eps_d     , ~multiplier ,
+  "Central"     , "Chen, Sexton & Smith (2026): vegetable-oil complex" , eps_s_chen , eps_d_chen , m_chen      ,
+  "Sensitivity" , "Roberts & Schlenker (2013): staple-food calories"   , eps_s_rs   , eps_d_rs   , m_rs
 )
 
 knitr::kable(
@@ -359,7 +387,7 @@ price_shock <- icct_table_1 |>
     year,
     vo_demand_billion_liters,
     demand_share_pct = 100 * vo_demand_billion_liters / q0_billion_liters,
-    pct_delta_p_low = demand_share_pct * m_chen,
+    pct_delta_p_central = demand_share_pct * m_chen,
     pct_delta_p_high = demand_share_pct * m_rs,
     beyond_marginal = demand_share_pct > 25
   )
@@ -381,11 +409,11 @@ DT::datatable(
     "Year",
     "VO demand (billion L)",
     "Demand share of market (%)",
-    "%ΔP low (Chen, M≈2.6)",
-    "%ΔP high (Roberts-Schlenker, M≈6.7)",
+    "%ΔP central (Chen, M≈2.5)",
+    "%ΔP sensitivity (Roberts-Schlenker, M≈6.7)",
     "Beyond marginal regime"
   ),
-  caption = "Projected vegetable-oil price shock attributable to marine biofuel demand. The low/high columns bracket the price response using the two elasticity scenarios. Years flagged 'beyond marginal regime' (demand share > 25% of the market, from ~2032) exceed the range where the constant-elasticity approximation is reliable; treat those values as indicative of direction and scale, not precise magnitudes.",
+  caption = "Projected vegetable-oil price shock attributable to marine biofuel demand. The central column uses the Chen et al. (2026) elasticities; the sensitivity column uses Roberts & Schlenker (2013). Years flagged 'beyond marginal regime' (demand share > 25% of the market, from ~2032) exceed the range where the constant-elasticity approximation is reliable; treat those values as indicative of direction and scale, not precise magnitudes.",
   options = list(pageLength = 10, scrollX = TRUE, dom = "t")
 )
 ```
@@ -396,37 +424,60 @@ DT::datatable(
 #| warning: false
 
 dygraphs::dygraph(
-  price_shock |> dplyr::select(year, pct_delta_p_low, pct_delta_p_high),
+  price_shock |> dplyr::select(year, pct_delta_p_central, pct_delta_p_high),
   main = "Projected vegetable-oil price shock from marine biofuel demand",
   ylab = "% change in vegetable oil price"
 ) |>
   dygraphs::dySeries(
     "pct_delta_p_high",
-    label = "High (Roberts-Schlenker, M≈6.7)"
+    label = "Sensitivity (Roberts-Schlenker, M≈6.7)"
   ) |>
-  dygraphs::dySeries("pct_delta_p_low", label = "Low (Chen, M≈2.6)") |>
+  dygraphs::dySeries("pct_delta_p_central", label = "Central (Chen, M≈2.5)") |>
   dygraphs::dyOptions(strokeWidth = 2, drawPoints = TRUE, pointSize = 3) |>
   dygraphs::dyLegend(show = "always") |>
   dygraphs::dyHighlight(highlightSeriesOpts = list(strokeWidth = 3))
 ```
 
-From about 2032 on, marine demand becomes a large fraction of the baseline market, where the constant-elasticity approximation is unreliable and, if anything, understates the true response. Last, we save the timeseries as a CSV for the land-use step:
+From about 2032 on, marine demand becomes a large fraction of the baseline market, where the constant-elasticity approximation is unreliable and, if anything, understates the true response.
+
+### Hand-off to the land-use model
+
+The land-use model takes a single price shock: the central (Chen) estimate for 2035, the final year of the ICCT projection (see [Methods](#a-common-price-shock-across-oils)). This same percentage is applied to each vegetable-oil crop price (palm, soy, canola) in the marine-demand scenario's price matrix.
 
 ```{r}
 #| label: export-price-shock
 #| message: false
 #| warning: false
 
-# Hand-off to the price -> ILUC regression (full precision, no rounding).
+# Hand-off to the price -> ILUC land-use model (full precision, no rounding).
+handoff_2035 <- price_shock |> dplyr::filter(year == 2035)
+
 dir.create(file.path("data", "derived"), showWarnings = FALSE, recursive = TRUE)
+utils::write.csv(
+  handoff_2035,
+  file.path("data", "derived", "vegetable_oil_price_shock_2035.csv"),
+  row.names = FALSE
+)
 utils::write.csv(
   price_shock,
   file.path("data", "derived", "vegetable_oil_price_shock.csv"),
   row.names = FALSE
 )
+
+cat(sprintf(
+  paste0(
+    "2035 hand-off: VO demand %.0f billion L on a Q0 of %.0f billion L ",
+    "(demand share %.0f%%) x multiplier %.2f = central price shock of +%.0f%%."
+  ),
+  handoff_2035$vo_demand_billion_liters,
+  q0_billion_liters,
+  handoff_2035$demand_share_pct,
+  m_chen,
+  handoff_2035$pct_delta_p_central
+))
 ```
 
-The exported columns `pct_delta_p_low` and `pct_delta_p_high` (in `data/derived/vegetable_oil_price_shock.csv`) are the inputs to the next step of the analysis: converting the price shock into ILUC area and emissions.
+The 2035 demand share is far beyond the marginal regime, so the central shock should be read as "the price response is very large — a multiple of baseline prices" rather than as a point estimate; the land-use model runs will carry this caveat with them. The exported `pct_delta_p_central` column in `data/derived/vegetable_oil_price_shock_2035.csv` is the input to the next step of the analysis: converting the price shock into ILUC area and emissions.
 
 ## Discussion
 
