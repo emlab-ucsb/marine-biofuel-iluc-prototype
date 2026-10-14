@@ -1,40 +1,140 @@
 ---
-title: "Assessing the ILUC implications of increasing marine biofuel demand"
-subtitle: "Prototype Proof-of-Concept Analysis"
-authors: Environmental Markets Lab (emLab) at University of California, Santa Barbara (UCSB). For International Council on Clean Transportation (ICCT)
+title: "ILUC implications of marine biofuel demand under the IMO Net-Zero Framework"
+subtitle: "Prototype proof-of-concept analysis"
+authors: Environmental Markets Lab (emLab), University of California, Santa Barbara (UCSB). For the International Council on Clean Transportation (ICCT)
 date: today
 format:
   html:
     toc: true
-    toc-depth: 3
+    toc-depth: 2
     code-fold: true
     theme: cosmo
     embed-resources: false
+    fig-dpi: 150
+execute:
+  message: false
+  warning: false
 bibliography: references.bib
 ---
 
-## Overview
+```{r}
+#| label: setup
+#| include: false
 
-This report documents a prototype proof-of-concept analysis investigating the projected indirect land use change (ILUC) implications of the increasing marine biofuel demand that could be incentivized by the yet-to-be-approved IMO Net-Zero Framework. This prototype analysis is being developed by Environmental Markets Lab (emLab) at University of California, Santa Barbara (UCSB) for International Council on Clean Transportation (ICCT). All results presented in this analysis should be considered exploratory and preliminary.
+# Package versions are pinned via renv (see renv.lock); run renv::restore() to install.
+# Functions are called with explicit pkg:: prefixes rather than attaching via library().
+
+# Headline numbers used in the Summary. The price shock is written by the export-price-shock
+# chunk below; the land-use results by r/land_use_model/03_summarise_results.R.
+shock_2035 <- utils::read.csv(file.path("data", "derived", "vegetable_oil_price_shock_2035.csv"))
+lum <- utils::read.csv(file.path("data", "derived", "land_use_country_results.csv.gz"))
+
+# Soybean oil's share of soybean crush value (Janzen & Wang 2025; see Methods). Must match
+# SOY_OIL_VALUE_SHARE in r/land_use_model/01_prepare_data.R.
+soy_oil_value_share <- 4.72 / (4.72 + 8.66)
+
+# Additional forest loss relative to BAU: BAU stock minus scenario stock, so positive = more loss.
+bau <- lum |>
+  dplyr::filter(scenario == "bau") |>
+  dplyr::select(country, year, carbon_bau = forest_carbon_tco2, area_bau = forest_area_ha)
+loss <- lum |>
+  dplyr::filter(scenario %in% c("vo_central", "vo_high", "vo_central_palm", "vo_central_soy")) |>
+  dplyr::inner_join(bau, by = c("country", "year")) |>
+  dplyr::mutate(
+    carbon_loss = carbon_bau - forest_carbon_tco2, # t CO2
+    area_loss = area_bau - forest_area_ha # ha
+  )
+global_loss <- loss |>
+  dplyr::summarise(
+    dplyr::across(c(carbon_loss, area_loss, carbon_bau, area_bau), sum),
+    .by = c(scenario, year)
+  )
+gl <- function(scn, yr, var) global_loss[[var]][global_loss$scenario == scn & global_loss$year == yr]
+
+final_year <- max(lum$year)
+n_years <- final_year - min(lum$year)
+country_final <- loss |>
+  dplyr::filter(year == final_year) |>
+  dplyr::mutate(share = carbon_loss / sum(carbon_loss), .by = scenario) |>
+  dplyr::arrange(scenario, dplyr::desc(carbon_loss))
+central_final <- country_final |> dplyr::filter(scenario == "vo_central")
+# Countries whose additional loss peaks and then narrows by >5% (BAU later clears some of the
+# same forest), among those with more than 1 Mt CO2 of additional loss.
+gap_peaks <- loss |>
+  dplyr::filter(scenario == "vo_central") |>
+  dplyr::summarise(
+    peak = max(carbon_loss),
+    peak_year = year[which.max(carbon_loss)],
+    final = carbon_loss[year == final_year],
+    .by = country
+  )
+n_narrowing <- sum(gap_peaks$peak > 1e6 & gap_peaks$final < 0.95 * gap_peaks$peak)
+mys <- gap_peaks[gap_peaks$country == "Malaysia", ]
+
+# Crop attribution: palm-only and soy-only runs of the central shock. They sum to the joint run
+# to within the interaction term reported here.
+crop_split <- c(
+  palm = gl("vo_central_palm", final_year, "carbon_loss"),
+  soy = gl("vo_central_soy", final_year, "carbon_loss")
+)
+interaction_pct <- 100 * (gl("vo_central", final_year, "carbon_loss") - sum(crop_split)) /
+  gl("vo_central", final_year, "carbon_loss")
+
+fmt1 <- function(x) formatC(x, format = "f", digits = 1, big.mark = ",")
+fmt0 <- function(x) formatC(x, format = "f", digits = 0, big.mark = ",")
+
+# Figures: one ggplot2 theme and one set of colors throughout. Scenarios and crops keep the same
+# colors in every figure; magnitude on maps uses a single-hue blue ramp.
+col_surface <- "#fcfcfb"
+col_land <- "#ecebe6"
+col_scenario <- c(Central = "#2a78d6", Sensitivity = "#eb6834")
+col_crop <- c("Oil palm" = "#1baf7a", "Soybeans" = "#eda100")
+blue_ramp <- c("#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#256abf", "#184f95", "#0d366b")
+
+theme_report <- function() {
+  ggplot2::theme_minimal(base_size = 11) +
+    ggplot2::theme(
+      plot.background = ggplot2::element_rect(fill = col_surface, colour = NA),
+      panel.grid.major = ggplot2::element_line(colour = "#e1e0d9", linewidth = 0.3),
+      panel.grid.minor = ggplot2::element_blank(),
+      text = ggplot2::element_text(colour = "#52514e"),
+      axis.text = ggplot2::element_text(colour = "#52514e"),
+      plot.title = ggplot2::element_text(colour = "#0b0b0b", face = "bold"),
+      plot.title.position = "plot",
+      legend.position = "top",
+      legend.justification = "left"
+    )
+}
+theme_map <- function() {
+  theme_report() +
+    ggplot2::theme(
+      panel.grid.major = ggplot2::element_blank(),
+      axis.text = ggplot2::element_blank(),
+      axis.title = ggplot2::element_blank(),
+      legend.position = "bottom",
+      legend.justification = "center"
+    )
+}
+
+# Country outlines (Natural Earth 1:110m), as vertices; see r/make_basemap.R.
+basemap <- utils::read.csv(file.path("data", "natural_earth", "ne_110m_admin_0_countries.csv.gz"))
+```
+
+## Summary
+
+All results are exploratory and preliminary.
+
+- **Demand.** Meeting the Net-Zero Framework's Base target at least cost could require `r fmt0(shock_2035$vo_demand_billion_liters)` billion liters of virgin vegetable oil a year for marine renewable diesel by 2035 [@seber2025], equal to `r fmt0(shock_2035$demand_share_pct)`% of current world production of the four major vegetable oils.
+- **Price shock.** Using elasticities from @chen2026, that demand raises vegetable-oil prices by about `r fmt0(shock_2035$pct_delta_p_central)`%; with those from @roberts2013, by `r fmt0(shock_2035$pct_delta_p_high)`%. A demand shift this large is far outside the range where constant elasticities are reliable, so read these as "prices rise to a multiple of baseline", not as point estimates.
+- **Deforestation.** Raising palm oil prices `r fmt0(shock_2035$pct_delta_p_central)`% and soybean prices `r fmt0(soy_oil_value_share * shock_2035$pct_delta_p_central)`% in emLab's land-use model adds `r fmt1(gl("vo_central", 2035, "carbon_loss") / 1e9)` Gt CO₂ of forest carbon loss (`r fmt1(gl("vo_central", 2035, "area_loss") / 1e6)` Mha) over business as usual within 15 years, and `r fmt1(gl("vo_central", final_year, "carbon_loss") / 1e9)` Gt CO₂ (`r fmt1(gl("vo_central", final_year, "area_loss") / 1e6)` Mha) over the model's `r n_years`-year horizon. The Roberts & Schlenker shock gives `r fmt1(gl("vo_high", final_year, "carbon_loss") / 1e9)` Gt CO₂.
+- **Where.** The loss is concentrated: `r central_final$country[1]` and `r central_final$country[2]` account for `r fmt0(100 * sum(central_final$share[1:2]))`% of it, and the top 12 countries for `r fmt0(100 * sum(central_final$share[1:12]))`%. The palm price shock drives `r fmt0(100 * crop_split[["palm"]] / sum(crop_split))`% of the loss and the soybean shock `r fmt0(100 * crop_split[["soy"]] / sum(crop_split))`%.
+- **Next.** Converting this loss into an ILUC carbon intensity (g CO₂e/MJ), comparable to the 62 g CO₂e/MJ ICCT has used [@sturrup2026] and the 84.1 g CO₂e/MJ that @chen2026 estimate for palm, is the next step.
 
 ## Background
 
-### The IMO Net-Zero Framework
+**The IMO Net-Zero Framework.** In April 2025 the International Maritime Organization approved draft amendments to MARPOL Annex VI that would set binding greenhouse-gas fuel-intensity (GFI) targets for ships of 5,000 gross tonnage and above, measured in well-to-wake g CO₂e/MJ against a 2008 baseline of 93.3 g CO₂e/MJ [@seber2025; @sturrup2026]. The Base target tightens from a 4% reduction in 2028 to 30% by 2035; the stricter Direct Compliance target from 17% to 43%. Ships above the Base target pay \$380/t CO₂e (Tier 2) on the excess; ships between the two targets pay \$100/t CO₂e (Tier 1). Adoption was delayed by at least a year from October 2025.
 
-At its 83rd session (April 2025), the International Maritime Organization (IMO) approved draft amendments to MARPOL Annex VI that, if adopted, would establish a legally binding Net-Zero Framework to decarbonize international shipping, with the goal of net-zero GHG emissions by or around 2050 [@seber2025; @sturrup2026]. The framework applies to all ships of 5,000 gross tonnage and above on international voyages. Each year, a ship reports its *attained* greenhouse-gas fuel intensity (GFI) — the average well-to-wake life-cycle emissions per unit of energy used on board, in grams of CO₂e per megajoule (g CO₂e/MJ) — and compares it against annual targets. A formal adoption vote slated for October 2025 was delayed by at least a year, so compliance may begin in 2029 rather than 2028.
-
-**Two-tier targets.** The framework sets two GFI targets, both defined as reductions from the 2008 fleet-average baseline of 93.3 g CO₂e/MJ, and both tightening every year:
-
-- A **Base target** (the less stringent tier), falling from a 4% reduction in 2028 (89.6 g CO₂e/MJ) to a 30% reduction by 2035 (65.3 g CO₂e/MJ), and set to reach a 65% reduction by 2040.
-- A stricter **Direct Compliance target**, falling from a 17% reduction in 2028 (77.4 g CO₂e/MJ) to a 43% reduction by 2035 (53.2 g CO₂e/MJ).
-
-**Carbon pricing.** A ship's position relative to these two thresholds determines what it pays for each tonne of excess CO₂e (a "compliance balance"):
-
-- Above the Base target → **Tier 2** penalty of **\$380/t CO₂e** (remedial units); banked surplus units from over-complying ships may be used instead.
-- Between the Direct Compliance and Base targets → reduced **Tier 1** penalty of **\$100/t CO₂e**, with no option to offset with surplus units.
-- Below the Direct Compliance target → the ship over-complies and earns tradable surplus units.
-
-**Fuel carbon intensities.** Because the framework judges fuels only on their life-cycle GFI, the compliance value of each fuel is set by how far its carbon intensity sits below the fossil incumbents. The values ICCT uses [@seber2025] illustrate the gap that makes crop-based biofuels attractive:
+**Why it drives vegetable-oil demand.** Fuels are judged only on their life-cycle GFI, with no land-use-change safeguards. Blending a biofuel is cheaper than the \$380/t Tier 2 penalty, so the least-cost strategy is to blend just enough to meet the Base target. ICCT finds the cheapest option, used-cooking-oil renewable diesel (UCO-RD), is limited to about 5% of shipping energy, so virgin vegetable-oil renewable diesel (VO-RD) fills the gap, reaching 46% of shipping energy by 2035 [@seber2025].
 
 | Fuel | Life-cycle carbon intensity (g CO₂e/MJ) |
 |---|---|
@@ -45,136 +145,110 @@ At its 83rd session (April 2025), the International Maritime Organization (IMO) 
 | Soy FAME biodiesel | 35.7 |
 | Used-cooking-oil renewable diesel (UCO-RD) | 13.1 |
 
-: Life-cycle (well-to-wake) carbon intensities used in the ICCT demand brief [@seber2025].
+: Direct life-cycle carbon intensities used by ICCT [@seber2025]. None include indirect land-use change.
 
-**Why the framework incentivizes biofuel demand.** The framework contains no eligibility criteria for compliance fuels and evaluates them solely on life-cycle emissions; crucially, the underlying LCA guidelines are still in development and include no safeguards for land-use change or other indirect emissions. Blending low-carbon-intensity biofuel into an otherwise fossil fuel mix lowers a ship's attained GFI, and as long as the cost of that blending stays below the \$380/t Tier 2 penalty, the cost-minimizing strategy is to blend just enough biofuel to meet the Base target and pay only the cheaper \$100/t Tier 1 charge. ICCT's cost-optimization finds the cheapest pathway — used-cooking-oil renewable diesel — is quickly exhausted by limited supply (~13.6 billion L of fuel, about 5% of shipping energy demand), so virgin vegetable-oil renewable diesel absorbs the remaining compliance burden, growing to 46% of shipping energy demand by 2035 [@seber2025]. This is the demand shock our analysis traces.
-
-### The indirect land-use change concern
-
-Indirect land use change (ILUC) occurs when demand for crop-based biofuel feedstocks raises agricultural commodity prices, and higher prices push cropland expansion into forest and other carbon-rich land elsewhere in the world. These emissions fall outside the fuel's direct supply chain, so lifecycle accounting that stops at the refinery gate misses them, even though they can rival or exceed the emissions of the fossil fuel being displaced. Because the current draft of the Net-Zero Framework contains no ILUC safeguards, a fuel mix that is fully compliant on paper could carry substantial uncounted emissions — making this question directly relevant to marine fuel policy.
-
-Our analysis traces this chain for marine biofuels:
+**Why ILUC matters.** Indirect land-use change (ILUC) happens when biofuel feedstock demand raises crop prices and higher prices push cropland into forest elsewhere. Those emissions sit outside the fuel's supply chain, so a fuel mix that complies on paper can carry large uncounted emissions. This analysis traces that chain:
 
 ```{mermaid}
 flowchart LR
-  A["IMO Net-Zero Framework<br/><i>policy</i>"] --> F["Marine renewable-diesel<br/>(VO-RD) fuel demand<br/><i>ICCT cost-optimization</i>"]
-  F --> B["Virgin vegetable-oil<br/>feedstock demand D<br/><i>1.22 kg oil per kg RD</i>"]
-  B --> C["Vegetable-oil<br/>price shock %ΔP<br/><i>this report</i>"]
-  C --> D["ILUC area and<br/>carbon emissions<br/><i>our land-use model, next</i>"]
+  A["IMO Net-Zero Framework"] --> F["Marine VO-RD demand<br/><i>ICCT cost-optimization</i>"]
+  F --> B["Virgin vegetable-oil demand<br/><i>1.22 kg oil per kg RD</i>"]
+  B --> C["Vegetable-oil price shock<br/><i>this report</i>"]
+  C --> D["Forest loss by country<br/><i>emLab land-use model</i>"]
+  D --> E["ILUC carbon intensity<br/><i>next step</i>"]
 ```
 
-### Literature review
+**Prior estimates.** Published ILUC values for vegetable-oil biofuels span more than an order of magnitude:
 
-We draw on four primary sources, each covering a different link in the chain. Two further sources on how price shocks transmit across the different vegetable oils [@cui2017; @santeramo2017] are discussed in [Methods](#a-common-price-shock-across-oils).
-
-| Source | Role in our pipeline | Key values we use |
+| Source | Approach | ILUC result |
 |---|---|---|
-| ICCT demand brief [@seber2025] | Projects the demand shock $D_t$ | 0 → 139 billion L virgin VO, 2028–2035 |
-| ICCT climate & revenue brief [@sturrup2026] | Benchmark fixed-factor translation of $D_t$ into ILUC emissions | 62 g CO₂e/MJ factor; ~950 Mt CO₂e cumulative |
-| Chen, Sexton & Smith [@chen2026] | Empirical demand → price → deforestation chain (the design we emulate) | Demand flexibility $-3.5$; price multiplier $M \approx 2.5$; ILUC CI 84.1 g CO₂e/MJ |
-| Roberts & Schlenker [@roberts2013] | Identification strategy and elasticities for the demand → price step | $\varepsilon_s \approx 0.10$, $\varepsilon_d \approx -0.05$; $M \approx 6.7$ |
+| ICCT climate & revenue brief [@sturrup2026] | Fixed factor applied to ICCT's demand projection | 62 g CO₂e/MJ; ~285 Mt CO₂e/yr by 2035; ~950 Mt CO₂e over 2028–2035 |
+| U.S. EPA model comparison [@epa2023mce] | Five models, 1 billion gal/yr soybean-oil biodiesel shock | 10 to 295 kg CO₂e/MMBTU (GCAM: 62) |
+| @chen2026 | Econometric demand → price → deforestation chain for palm, 2002–2018 | 84.1 g CO₂e/MJ (90% CI 48.7–113.5) |
+| GLOBIOM for the EU [@valin2015] | Global economic land-use model | > 100 g CO₂e/MJ for high-risk feedstocks |
 
-: Roles of the four sources in our analysis pipeline.
+: ICCT's 62 is the EPA's GCAM value, which the EPA reports in kg CO₂e/MMBTU (≈ 59 g CO₂e/MJ). With it, ICCT finds the ILUC-adjusted fleet GFI reaches 93.9 g CO₂e/MJ by 2035, above the fossil baseline [@sturrup2026].
 
-#### Estimating the maximum potential vegetable oil demand for international shipping under the IMO Net-Zero Framework [@seber2025]
+Our design follows Chen et al.: estimate the price response to the demand shock, then let an econometric land-use model translate prices into forest loss, rather than assume an ILUC factor.
 
-This brief estimates how much vegetable oil demand the Net-Zero Framework could induce. It does not quantify the resulting ILUC emissions, but it flags the risk and provides the demand projection that our analysis and the companion brief below both build on.
+## Methods and assumptions
 
-- **Policy mechanism.** The framework sets two annual greenhouse-gas fuel-intensity (GFI) targets against a 2008 baseline of 93.3 g CO₂e/MJ: a Base target, with a \$380/t CO₂e Tier 2 penalty for exceeding it, and a stricter Direct Compliance target, with a \$100/t Tier 1 penalty between the two. Fuels are judged only on their direct life-cycle emissions; there are no ILUC safeguards, so crop-based biofuels are an attractive compliance option.
-- **Demand derivation.** ICCT builds a least-cost sector-wide fuel mix for 2028–2035. Fossil LNG enters exogenously (0.81 EJ, about 8% of energy demand by 2035, from their POLARIS model [@polaris2024]), and biofuels are then blended until the fleet-wide average carbon intensity just meets the Base target. Since blending costs less than \$380/t, the cost-minimizing strategy is to meet the Base target and pay only the Tier 1 penalty.
-- **Feedstock logic.** The cheapest pathway, used-cooking-oil renewable diesel (UCO-RD, 13.1 g CO₂e/MJ), is blended first up to its supply limit; virgin vegetable-oil renewable diesel (soy-RD, 42.3 g CO₂e/MJ) fills the rest. UCO supply is the binding constraint — roughly 14.3 billion L of feedstock, or 13.6 billion L of fuel, covering only about 5% of shipping energy demand — so soy oil absorbs the remaining compliance burden.
-- **Key finding.** VO-RD grows to 46% of shipping energy demand by 2035, implying virgin vegetable-oil demand of up to 139 billion liters (Table 1, p. 5), roughly 3.5 times the 40 billion liters of vegetable oil used for biofuels today. ICCT judges existing virgin oil supply insufficient to meet the targets beyond 2032 without new cropland or diversion from other sectors.
-- **Use in this analysis.** We scrape Table 1 and use the `vo_demand_billion_liters` column as the demand shock for our land-use model (see [Data sources](#data-sources)).
+The analysis has four steps:
 
-#### Climate and revenue considerations for the IMO Net-Zero Framework [@sturrup2026]
+1. **Demand → price.** Convert ICCT's 2035 vegetable-oil demand into a vegetable-oil price shock.
+2. **Price → model crops.** Map that shock onto the crop prices in emLab's land-use model.
+3. **Prices → forest loss.** Simulate forest loss under baseline and shocked prices, at zero carbon price, and take the difference.
+4. **Forest loss → ILUC intensity** (next). Divide the additional emissions by the fuel energy delivered.
 
-This companion brief takes the demand projection from @seber2025 and translates it into ILUC emissions — the same step our prototype performs, using different methods. It covers two topics: biofuel use for compliance, and the climate finance raised from penalties.
+### Demand → price shock {#sec-price-shock}
 
-- **Approach.** They assume the projected vegetable-oil demand is met with soy-RD and apply a single illustrative ILUC emission factor of 62 g CO₂e/MJ from the U.S. EPA's Model Comparison Exercise [@epa2023mce]. Since the blend is assumed to meet the Base target, the ILUC-adjusted carbon intensity of the fuel mix is simply the Base-target GFI plus the ILUC contribution.
-- **Provenance of the 62.** The value is the GCAM estimate of land-use-change carbon intensity for soybean oil biodiesel in Table 7.7-1 of the EPA exercise; the other models report 295 (ADAGE), 10 (GTAP), 23 (GLOBIOM), and 10 (GREET). The exercise ran a 1 billion gallon per year soybean-biodiesel shock through five models, and the spread is a fair measure of how unsettled ILUC estimates remain. One unit caveat: the EPA table is in kg CO₂e/MMBTU (62 kg CO₂e/MMBTU ≈ 59 g CO₂e/MJ), while the ICCT brief cites the figure as 62 g CO₂e/MJ.
-- **Caveat on the factor.** The value may be high for U.S. soy but likely understates ILUC for Indonesian palm or Brazilian soy; GLOBIOM-based estimates for the EU exceed 100 g CO₂e/MJ for high-risk feedstocks [@valin2015]. It is an illustrative point estimate, not a bound.
-- **ILUC findings.** The ILUC contribution to fleet GFI grows from 0.9 g CO₂e/MJ in 2029 to 28.5 by 2035 (their Table A1), pushing the ILUC-adjusted GFI to 93.9 g CO₂e/MJ — above the 93.3 fossil baseline. A compliant fuel mix could be worse for the climate than the fuel it replaces.
-- **Magnitude.** Annual ILUC emissions reach roughly 285 Mt CO₂e by 2035; the 2028–2035 cumulative total of about 950 Mt CO₂e is comparable to a full year of well-to-wake emissions from international shipping (939 Mt CO₂e in 2024).
-- **Revenue interaction.** Blending biofuels to avoid Tier 2 penalties erodes Net-Zero Fund revenue (projected at \$11–12 billion per year), and raising the Tier 1 price would make blending more attractive still, cutting revenue further while worsening ILUC.
-- **Policy conclusion.** They recommend ILUC accounting in the IMO LCA guidelines (as in CORSIA and California's LCFS), limits on food- and feed-based biofuels, and financial incentives reserved for advanced fuels.
+An outward demand shift moves the equilibrium price by the size of the shift divided by the gap between the supply and demand elasticities [@roberts2013]:
 
-#### Using vegetable oils for biofuel accelerates tropical deforestation and increases carbon emissions [@chen2026]
+$$ \%\Delta P \;\approx\; \underbrace{\frac{D}{Q_0}}_{\text{demand shift}} \;\times\; \underbrace{\frac{1}{\varepsilon_s - \varepsilon_d}}_{\text{multiplier } M} $$
 
-This working paper is the closest empirical analog to our prototype. Rather than assuming an ILUC factor, the authors estimate the full demand → price → land conversion → emissions chain econometrically; our analysis aims to reproduce that structure for the marine case.
+where $D$ is marine virgin vegetable-oil demand, $Q_0$ is baseline world production, $\varepsilon_s > 0$ is the supply elasticity and $\varepsilon_d < 0$ the demand elasticity.
 
-- **Method.** Three steps: demand and supply models for the major oil crops (palm, soybean, rapeseed, sunflower) establish how biomass-based diesel (BBD) demand moves palm prices; a panel regression on 32,394 grid cells (9 km × 9 km, 2002–2018) of remote-sensing data estimates the effect of palm prices on deforestation, with fixed effects plus reverse-causality and weather checks; and spatial biomass, peatland, and forest-type data convert deforested area into carbon emissions.
-- **Price response.** BBD averaged 8.5% of global vegetable-oil consumption over 2002–2018, which the authors estimate raised palm oil prices 21.2% over business-as-usual (90% CI: 12.2–28.5%). The key parameter is a demand flexibility of 3.5: a 1% drop in oil-crop production raises palm prices 3.5%.
-- **Supply response.** Short-run palm supply elasticity is small and insignificant (palm is a perennial that takes about four years to fruit); the long-run elasticity is about 0.1. Some 84% of the competing-crop supply response comes from area expansion and only 16% from yield, at odds with the strong intensification response many CGE-based ILUC models assume.
-- **Deforestation.** A \$1,000/ha increase in attainable palm revenue drives about 9.3 additional hectares of deforestation per average grid cell, which aggregates to 1.7 million ha of forest-to-palm conversion (90% CI: 1.0–2.3 Mha) — about 20% of all such conversion in Indonesia and Malaysia over the period. Conversion falls mostly on natural forest and is driven mainly by industrial growers.
-- **Emissions.** Net land-use-change emissions are 1,086 Tg CO₂e (biomass loss 758, peat 614, soil carbon 95, less 380 sequestered by the palms), amortized over 25 years. That works out to an ILUC carbon intensity of 84.1 g CO₂e/MJ (90% CI: 48.7–113.5); with cultivation, processing, and transport added (34.6–63.5), total carbon intensity is 118.7–147.6 g CO₂e/MJ, or 22–52% above petroleum diesel (~97). The authors treat this as a conservative lower bound, since it excludes ILUC from other oils and from palm outside the study region.
-- **Substitution.** Vegetable oils are close substitutes, so policies that restrict only palm still bid up palm prices by diverting demand to soy, rapeseed, and sunflower. This is the same market linkage behind the soy-driven ILUC concern in the ICCT briefs, and it is why the authors favor waste feedstocks (UCO, tallow) that avoid land-use effects.
+| Input | Value | Source |
+|---|---|---|
+| Marine virgin vegetable-oil demand, 2035 ($D$) | 139.3 billion L | ICCT [@seber2025], Table 1 |
+| Baseline market ($Q_0$) | ≈ 204 Mt: world production of palm, soybean, rapeseed and sunflowerseed oil, 2024/25 | USDA PSD [@usdapsd] |
+| Oil density, to put $D$ and $Q_0$ in the same units | 0.92 kg/L | ICCT's own soy-oil conversion: 12.4 Mt = 13.5 billion L (0.919 kg/L) [@seber2025], Table A1 |
+| Demand elasticity, central ($\varepsilon_d$) | −0.284, the inverse of a demand flexibility of −3.523 (SE 1.085) | @chen2026, Table S1, col. 3 |
+| Supply elasticity, central ($\varepsilon_s$) | ≈ 0.12: long-run 0.10 for palm and 0.13 for competing oil crops, weighted by production | @chen2026, Fig. 2B, rows 3–4 |
+| Elasticities, sensitivity | $\varepsilon_s = 0.10$, $\varepsilon_d = -0.05$ | @roberts2013, Table 1 (ranges 0.09–0.12 and −0.03 to −0.07) |
+| Demand year | 2035 only | Our choice: the final year of the ICCT projection |
+| "Beyond marginal" flag | demand share > 25% | Our flag for where the approximation is unreliable; not from a source |
 
-#### Identifying supply and demand elasticities of agricultural commodities: implications for the US ethanol mandate [@roberts2013]
+: Inputs to the price shock. The central multiplier is $M \approx 2.5$; the sensitivity, $M \approx 6.7$.
 
-This paper supplies the identification strategy and elasticity estimates for the demand-to-price step: how a mandated biofuel demand shock translates into an equilibrium commodity price change.
+Notes on these choices:
 
-- **Identification.** The paper uses competitive storage theory to justify weather-driven yield shocks as instruments: past shocks shift inventories and futures prices, identifying supply, while contemporaneous shocks move current prices, identifying demand. First-stage F-statistics exceed 10. The analysis covers corn, wheat, rice, and soybeans (about 75% of global food calories), aggregated into caloric equivalents.
-- **Elasticities.** Supply is 0.09–0.12 and demand −0.03 to −0.07 (their Table 1), both larger in magnitude than uninstrumented estimates. The implied price multiplier, 1/(β~s~ − β~d~), is 5.8–7.7: small demand shifts produce large price changes.
-- **Extensive margin.** The land-area elasticity is 0.07–0.08, with no significant fertilizer response. Added production comes from expanding cropland rather than intensification, which is the mechanism connecting biofuel demand to land-use change.
-- **Ethanol-mandate application.** Diverting about 5% of world caloric production (roughly one-third of US corn) to ethanol raises staple food prices about 30% (95% CI: 14–35%; closer to 20% if a third of the calories return as feed byproduct), expands world crop area about 2%, and implies a consumer-surplus loss near \$180 billion per year, borne mostly by net-food-importing developing countries.
-- **Use in this analysis.** We take the elasticity estimates and the multiplier logic from this paper to map the marine demand shock into a vegetable-oil price change; land conversion then follows through the mechanism in @chen2026.
+- **Market definition.** Vegetable oils are close substitutes, so the shock plays out across the oil complex even though marine demand lands on soy [@chen2026]. $Q_0$ covers the same four oils as the Chen elasticities.
+- **Supply elasticity stays in.** The land-use model takes prices as given, so the price it receives must already be an equilibrium price. Dropping $\varepsilon_s$ ($M \approx 3.5$) would overstate the shock by about 40%. This assumes the model's own supply response is broadly consistent with $\varepsilon_s \approx 0.12$; that is untested.
+- **Large shocks.** The formula is a marginal approximation. From about 2032 marine demand is a large share of the market, where the true response is probably convex [@roberts2013], so the 2035 shock is indicative of scale only.
+- **Long run.** Both elasticity sets are long-run values. Oil palm takes about four years to fruit, so short-run supply is nearly fixed [@chen2026].
+- **Soy meal.** Crushing soybeans also yields meal, whose revenue partly offsets oil-price pressure; Roberts & Schlenker scale their effect by two-thirds when a third of the calories return as feed [@roberts2013]. We make no such adjustment to the oil-price shock, so it errs high. (Meal does enter how the shock reaches the model's soybean price; see below.)
+- **Check.** The formula recovers both source papers' headline results (see [Results](#sec-results-price)).
 
-## Methods
+### Price shock → the model's crops {#sec-mapping}
 
-### From demand projection to a vegetable-oil price shock
+Following @chen2026, the same percentage shock applies to every vegetable-oil price. They price everything off palm, and show the four oil prices are cointegrated with near-unit long-run coefficients (soybean 1.04, canola 1.01, sunflower 0.86; their Table S5). Studies that model the oils as separate markets find partial, uneven transmission [@cui2017; @santeramo2017], so oil-specific pass-through is a possible refinement.
 
-Our land-use model takes as input a price shock: the proportional change in the vegetable-oil price attributable to new marine biofuel demand. We derive it from the ICCT demand series (`vo_demand_billion_liters`; see [Data sources](#data-sources)) using the standard comparative-statics result that an outward demand shift moves the equilibrium price by the size of the shift divided by the gap between the supply and demand elasticities [@roberts2013]:
+The land-use model has 17 crops. Only two are vegetable-oil crops: `Oil, palm`, priced per tonne of palm oil, and `Soybeans`, priced per tonne of whole beans. Upstream's code describes the model's baseline prices as observed 2020 prices: \$768/t for palm and \$415/t for soybeans. These are within about 2% of the World Bank's 2020 averages for palm oil (\$752/t) and soybeans (\$407/t), and far from soybean oil (\$838/t) [@worldbank2022pink]. The shock is mapped as follows:
 
-$$ \%\Delta P_t \;\approx\; \underbrace{\frac{D_t}{Q_0}}_{\text{demand shift}} \;\times\; \underbrace{\frac{1}{\varepsilon_s - \varepsilon_d}}_{\text{price multiplier } M} $$
+| Model crop | Shock | Why | Source |
+|---|---|---|---|
+| Palm oil | $\%\Delta P$ | The model prices palm as oil | — |
+| Soybeans | $s \times \%\Delta P$, with $s = 0.353$ | Oil is only part of a soybean's value; the meal price is held fixed. $s = \$4.72 / (\$4.72 + \$8.66)$, the 2007–2025 average per-bushel values of soybean oil and meal | @janzen2025 (USDA AMS Illinois plant prices; 11 lb oil and 48 lb meal per bushel) |
+| Rapeseed/canola, sunflower | not modeled | Not among the model's crops | — |
 
-where $D_t$ is the projected marine virgin vegetable-oil demand in year $t$ (billion L), $Q_0$ is baseline global vegetable-oil consumption (billion L), $\varepsilon_s > 0$ is the supply elasticity, and $\varepsilon_d < 0$ is the demand elasticity (so the denominator is $\varepsilon_s + |\varepsilon_d|$). The shock depends on demand as a share of the whole market, not on absolute volume.
+: How the oil-price shock enters the land-use model.
 
-Our **central estimate** takes both elasticities from Chen, Sexton & Smith [@chen2026], since theirs is the empirical setting closest to ours (the vegetable-oil complex rather than staple-food calories):
+- **Checks on $s$.** Irwin's 2007–2017 averages give 0.347 [@irwin2017]; World Bank 2020 prices for soybean oil and meal (\$838/t and \$394/t) give 0.33 [@worldbank2022pink]. The weekly share is volatile: 25–35% over 2013–2020, rarely below 35% since, and briefly 50% in 2021 and 2025 [@janzen2025]. This is an accounting pass-through, not an estimate of how soybean prices respond in the market.
+- **Omitted crops.** Leaving out rapeseed and sunflower understates ILUC. We keep $Q_0$ over all four oils anyway, because the Chen elasticities are defined over that market; a two-oil $Q_0$ would enlarge the demand share and pair a four-oil elasticity with a two-oil quantity. In 2024/25 the six largest producers grew 86% of world rapeseed (Canada, EU, China, India, Australia, Russia) and 90% of sunflowerseed (Russia, Ukraine, EU, Argentina, Kazakhstan, China) [@usdapsd], which suggests the omitted response falls largely outside tropical forests. We have not quantified it.
 
-- **Demand.** We use the baseline demand flexibility plotted in their Figure 2, panel A. That panel shows point estimates and 90% confidence intervals of the demand flexibility (the inverse demand elasticity, $\beta_1 = d\ln P / d\ln Q$); its first row, labeled "Aggregate oil crops" and shaded as the *Baseline* band, is the estimate we take. It comes from their two-stage least squares inverse-demand regression of the log December palm oil price on the log aggregate production of the four major oil crops (oil palm fruit, soybeans, rapeseed, sunflower), using annual FAO data for 1961–2022 ($N = 62$) with production instrumented by weather-driven yield shocks and a restricted-cubic-spline time trend (5 knots). The underlying coefficient is reported in their Table S1, column 3: $\beta_1 = -3.523$ (robust SE 1.085; 90% CI $[-5.3, -1.7]$) — a 1% drop in aggregate oil-crop production raises palm oil prices 3.5%. Because the flexibility is the reciprocal of the demand elasticity, $\varepsilon_d = 1/{-3.523} \approx -0.284$ (reported as $-0.28$ in their supplement).
-- **Supply.** Their long-run supply elasticities with respect to the palm price are ~0.10 for palm and ~0.13 for the competing oil crops, which they combine as a production-share-weighted average, $\varepsilon_s \approx 0.12$.
+### Prices → forest loss: the land-use model {#sec-land-use-model}
 
-Together these give a central multiplier $M = 1/(\varepsilon_s - \varepsilon_d) \approx 2.5$ — exactly the machinery Chen et al. use for their own counterfactual ($\%\Delta P = \%\Delta Q / (\varepsilon_s - \varepsilon_d)$). As a **sensitivity**, we retain the Roberts & Schlenker [@roberts2013] staple-food elasticities ($\varepsilon_s \approx 0.10$, $\varepsilon_d \approx -0.05$), whose much less elastic demand gives $M \approx 6.7$. As a check on the formula and our parameter choices, it recovers both papers' headline results: 8.5% × 2.5 ≈ 21% against Chen's reported 21.2%, and 5% × 6.7 ≈ 33% against Roberts & Schlenker's reported 29–39%. We repeat these checks in code with the results.
+We use emLab's global deforestation model (`emlab-ucsb/land-based-solutions`), copied into this repository; [Appendix A](#sec-lum-changes) lists every change we made.
 
-A few modeling choices matter for interpretation:
+- **Estimation.** A fractional logit (fixest, quasibinomial) of each grid cell's annual deforestation share on agricultural revenue and remaining tree-cover share, with cell and country-by-year fixed effects, fit to 2001–2020 (29.1 million cell-years).
+- **Revenue.** For each cell, the harvest-share-weighted sum over the 17 crops of (crop price minus a transport cost that scales with travel time to port and the crude-oil price) × attainable yield, capitalized at 5%.
+- **Simulation.** Starting from 2020 tree cover, the fitted model runs forward one year at a time for 2021–2171 over 1,450,769 cells in 154 countries, with country effects held at their 2016–2020 average. Cleared forest does not regrow.
+- **Scenarios.** Carbon price 0 throughout. **BAU** uses 2020 prices; **central** raises palm oil by `r fmt1(shock_2035$pct_delta_p_central)`% and soybeans by `r fmt1(soy_oil_value_share * shock_2035$pct_delta_p_central)`%; **sensitivity** raises them by `r fmt1(shock_2035$pct_delta_p_high)`% and `r fmt1(soy_oil_value_share * shock_2035$pct_delta_p_high)`%. Two more runs apply the central shock to each crop alone, to split the loss between palm and soybeans. Prices change permanently in the first model year, so model year 2035 means 15 years after the shock, not calendar 2035.
+- **Outputs.** Forest carbon (t CO₂) is tree cover × carbon density; forest area (ha) is forest carbon ÷ carbon density, following the model's own conversion. Emissions are forest carbon lost: peat, soil carbon and foregone sequestration are not counted. As a check, modeled 2020 forest area is `r fmt0(sum(bau$area_bau[bau$year == 2020]) / 1e6)` Mha, `r fmt0(100 * sum(bau$area_bau[bau$year == 2020]) / 4.06e9)`% of FAO's 4.06 billion ha [@fao2020fra]; the two use different forest definitions.
 
-- **Why the supply elasticity stays in the formula.** Our land-use model also represents a supply response — land converting in reaction to prices — which raises the question of whether including $\varepsilon_s$ here double-counts it. It does not, because the two steps answer different questions: $\varepsilon_s$ in the multiplier determines *how much the price rises* given that producers expand supply, while the land-use model determines *where that expansion lands and what carbon it releases*. The land-use model takes prices as exogenous, so the price we hand it must already be an equilibrium price; dropping $\varepsilon_s$ (i.e., $M = 1/|\varepsilon_d| \approx 3.5$) would assume zero supply response in the price step while asking the land-use model to compute that very response, overstating the shock by roughly 40%. This mirrors Chen et al., whose 21.2% headline is likewise the equilibrium price ($8.5\% / 0.40$), not the pure demand-side flexibility ($8.5\% \times 3.5 \approx 30\%$), and whose deforestation regression is then run on that equilibrium price. The implicit assumption — that our land-use model's aggregate supply response is broadly consistent with $\varepsilon_s \approx 0.12$ — could be checked or iterated to a joint equilibrium in future work.
-- **Market definition.** Because vegetable oils are close substitutes, the shock plays out in the aggregate oil complex, with palm as the marginal price, even though the marine demand lands on soy [@chen2026]. We therefore set $Q_0$ to match the market over which the Chen elasticities are defined: global production of the four major oil crops (palm, soybean, rapeseed, sunflower). The USDA Production, Supply and Distribution (PSD) database puts 2024/25 world production of the four oils at about 204 Mt (palm 78.9, soybean 70.1, rapeseed 34.3, sunflowerseed 20.4) [@usdapsd] (see [Data sources](#data-sources)), about 221 billion liters at ~0.92 kg/L. (USDA's total across all nine tracked vegetable oils is ~231 Mt [@usda2025oilseeds]; using the four-oil complex keeps $Q_0$ consistent with the demand flexibility's denominator.)
-- **Single demand year.** The land-use model takes one price shock, not a time series. We use the final year of the ICCT projection (2035, virgin VO demand of 139 billion L) — the mature-policy year, when the framework's targets have tightened enough for VO-RD to carry most of the compliance burden. We still report the full 2028–2035 series for context.
-- **Large shocks.** The constant-elasticity approximation is a marginal result. From about 2032 the ICCT demand becomes a large fraction of the market, where the linear form loses reliability and the true price response is likely convex, consistent with the positively skewed confidence interval in @roberts2013 and with the supply shortfall ICCT itself flags.
-- **Short- vs. long-run.** Oil palm is a perennial with roughly a four-year lag to fruit, so short-run supply is nearly fixed and the long-run response is larger [@chen2026]. The elasticities above are long-run values.
-- **Soy co-product.** Crushing soybeans for oil also produces protein meal, and meal revenue partially offsets the oil-price pressure — the analogue of the distillers-grains adjustment in @roberts2013, which scales their price effect by roughly two-thirds under full feed recycling. Chen et al. avoid the issue by pricing the shock off palm. We apply no adjustment, so on this margin our estimates err high.
+### Forest loss → ILUC carbon intensity (next)
 
-### A common price shock across oils {#a-common-price-shock-across-oils}
+The planned last step divides cumulative additional emissions, annualized over the simulation horizon, by the annual energy of 2035 VO-RD use, giving g CO₂e/MJ that can be added to VO-RD's direct 42.3 g CO₂e/MJ [@seber2025]. Because the model resolves loss by cell, the intensity will decompose by country.
 
-The formula above yields a single percentage price shock, but our land-use model takes crop-specific price matrices. Following Chen, Sexton & Smith [@chen2026], we apply the **same percentage shock to each vegetable-oil crop price** (palm, soy, canola). Their model carries only one price — everything is denominated in the palm price, and a demand shock landing on any oil is expressed as a share of the combined four-oil quantity — and they support this "one market, one price" treatment empirically: palm prices respond to production shocks in competing oil crops about as strongly as to palm's own (their Figure 2A), and the four oil prices are cointegrated with near-unit long-run coefficients (soybean 1.04, canola 1.01, sunflower 0.86; their Table S5), meaning proportional shocks transmit roughly one-for-one across oils.
+## Data
 
-Studies that model the oils as separate markets find transmission that is real but partial and heterogeneous — Cui & Martin [@cui2017] and an ICCT consultant report on cross-price elasticities [@santeramo2017] — so relaxing the uniform-shock assumption with oil-specific pass-through is a potential refinement for future work.
+### ICCT demand projection
 
-### From price shock to ILUC carbon intensity
+ICCT's Table 1 (p. 5) gives the least-cost fuel mix for 2028–2035 [@seber2025]. We scrape it from the PDF.
 
-Converting $\%\Delta P$ into ILUC area and emissions uses our land-use model (developed separately), which regresses land conversion on crop prices and simulates forward by country. The hand-off works as follows:
-
-1. **Two scenarios.** A business-as-usual run with baseline crop prices, and a marine-demand run in which the vegetable-oil crop prices (palm, soy, canola) are raised by the common percentage shock derived here. The model's carbon price is set to zero in both scenarios, so the difference between runs isolates the price-driven land-use response.
-2. **Differencing and annualization.** Differencing the two runs gives the additional land-use-change emissions attributable to marine biofuel demand, annualized over the 150-year simulation horizon.
-3. **Carbon intensity.** Dividing annualized emissions by the annual fuel energy delivered (MJ of VO-RD in the 2035 demand year) yields an ILUC carbon intensity in g CO₂e/MJ, directly comparable to — and addable to — the direct carbon intensity ICCT assumes for soy VO-RD (42.3 g CO₂e/MJ [@seber2025]).
-4. **Country decomposition.** Because the model resolves land conversion by country, the ILUC intensity decomposes into country contributions (e.g., a stacked bar chart), showing where the induced conversion falls.
-
-The 2035 price shock is written to `data/derived/vegetable_oil_price_shock_2035.csv` (and the full series to `data/derived/vegetable_oil_price_shock.csv`) for that step.
-
-## Data sources
-
-### Projected demand for soy-based vegetable oil (from ICCT)
-
-In the research brief
-[Estimating the maximum potential vegetable oil demand for international shipping under the International Maritime Organization’s Net-Zero Framework](https://theicct.org/wp-content/uploads/2025/09/ID-450-Vegetable-Oil_research-brief_final.pdf) [@seber2025], ICCT estimates the projected demand for marine renewable biodiesel (and the associated demand for used cooking oil feedstock and virgin soy-based vegetable oil feedstock) under the proposed IMO Net-Zero Framework, from 2028 to 2035. This projected demand is summarized in the report's **Table 1** (page 5). We scraped the PDF report and turned this into a data tibble for use in our analysis:
 ```{r}
 #| label: scrape-icct-table-1
-#| message: false
-#| warning: false
-
-# Package versions are pinned via renv (see renv.lock); run renv::restore() to install.
-# Functions are called with explicit pkg:: prefixes rather than attaching via library().
 
 pdf_path <- file.path(
   "data",
@@ -190,9 +264,6 @@ data_lines <- stringr::str_subset(lines, "^20(2[89]|3[0-5])\\b")
 # Each data row yields exactly 10 numeric tokens:
 #   year, shipping demand, base target, fossil LNG %,
 #   UCO-RD %, UCO-RD bl, VO-RD %, VO-RD bl, UCO demand bl, VO demand bl
-# Each year appears on its own line in the extracted text, so we
-#pull the numeric tokens per row and split the two compound columns
-# ("% energy demand / billion liters") into separate fields.
 nums <- stringr::str_extract_all(data_lines, "[0-9]+\\.?[0-9]*")
 mat <- do.call(rbind, lapply(nums, function(x) as.numeric(x[seq_len(10)])))
 
@@ -213,87 +284,37 @@ names(icct_table_1) <- c(
 icct_table_1 <- icct_table_1 |>
   dplyr::mutate(year = as.integer(year)) |>
   dplyr::arrange(year)
-```
-
-#### Column schema
-
-The scraped columns, their meaning, and units (derived from Table 1 and its
-notes in the ICCT brief [@seber2025]). "UCO-RD" is used-cooking-oil-based
-renewable diesel and "VO-RD" is vegetable-oil-based renewable diesel; the
-*-RD* volumes are the fuel produced, while the *UCO/VO demand* columns are the
-feedstock required to make it.
-
-```{r}
-#| label: icct-table-1-schema
-#| message: false
-#| warning: false
-
-icct_table_1_schema <- tibble::tribble(
-  ~column                           , ~description                                                                                     , ~units               ,
-  "year"                            , "Calendar year of the projection"                                                                , "year (2028–2035)"   ,
-  "shipping_energy_demand_ej"       , "Total international shipping energy demand (ships ≥5,000 GT; ICCT POLARIS model)"               , "EJ (exajoules)"     ,
-  "base_target_trajectory_gco2e_mj" , "Base target GHG fuel-intensity trajectory the blended fuel must meet in the Net-Zero Framework" , "g CO2e/MJ"          ,
-  "fossil_lng_pct"                  , "Fossil LNG share of shipping energy demand"                                                     , "% of energy demand" ,
-  "ucord_pct_energy_demand"         , "UCO-RD share of shipping energy demand"                                                         , "% of energy demand" ,
-  "ucord_billion_liters"            , "UCO-RD fuel volume blended into the fuel mix"                                                   , "billion liters"     ,
-  "vord_pct_energy_demand"          , "VO-RD share of shipping energy demand"                                                          , "% of energy demand" ,
-  "vord_billion_liters"             , "VO-RD fuel volume blended into the fuel mix"                                                    , "billion liters"     ,
-  "uco_demand_billion_liters"       , "Used cooking oil (UCO) feedstock demand to produce the UCO-RD"                                  , "billion liters"     ,
-  "vo_demand_billion_liters"        , "Virgin vegetable oil (VO) feedstock demand to produce the VO-RD"                                , "billion liters"
-)
 
 knitr::kable(
-  icct_table_1_schema,
-  col.names = c("Column", "Description", "Units")
+  icct_table_1 |>
+    dplyr::select(
+      year,
+      shipping_energy_demand_ej,
+      base_target_trajectory_gco2e_mj,
+      ucord_pct_energy_demand,
+      vord_pct_energy_demand,
+      vord_billion_liters,
+      vo_demand_billion_liters
+    ),
+  col.names = c(
+    "Year",
+    "Shipping energy (EJ)",
+    "Base target (g CO₂e/MJ)",
+    "UCO-RD (% of energy)",
+    "VO-RD (% of energy)",
+    "VO-RD fuel (billion L)",
+    "Virgin VO feedstock (billion L)"
+  ),
+  caption = "ICCT Table 1, selected columns [@seber2025]. Virgin vegetable-oil feedstock, the last column, is the demand shock D."
 )
 ```
 
-```{r}
-#| label: icct-table-1-interactive
-#| message: false
-#| warning: false
+### Baseline vegetable-oil production
 
-DT::datatable(
-  icct_table_1,
-  rownames = FALSE,
-  filter = "top",
-  caption = 'Caption from the ICCT report: "UCO-RD and VO-RD blend ratios and volumes to comply with the base target emissions trajectory. Notes: UCO-based renewable diesel availability is used as a constraint, and the rest of the demand is assumed to come from soy oil-based renewable diesel. UCO and VO demand to reach the estimated renewable diesel volumes are included. Estimations for shipping energy demand for ships of ≥ 5,000 gross tonnage are from the ICCT’s POLARIS Mode"',
-  options = list(pageLength = 10, scrollX = TRUE)
-)
-```
-
-The most important metric for our analysis is `vo_demand_billion_liters` (the projected soy-based virgin vegetable oil feedstock demand). It is this projected demand that we believe will most directly lead to a price shock that can be used in our land use model. Here we look at a time series of this projected demand:
-
-```{r}
-#| label: icct-demand-timeseries
-#| message: false
-#| warning: false
-
-ts_data <- icct_table_1 |>
-  dplyr::select(
-    year,
-    vo_demand_billion_liters
-  )
-
-dygraphs::dygraph(
-  ts_data,
-  main = "Projected demand for soy-based vegetable oil virgin feedstock",
-  ylab = "Billion liters"
-) |>
-  dygraphs::dySeries("vo_demand_billion_liters", label = "VO demand") |>
-  dygraphs::dyOptions(strokeWidth = 2, drawPoints = TRUE, pointSize = 3) |>
-  dygraphs::dyLegend(show = "always") |>
-  dygraphs::dyHighlight(highlightSeriesOpts = list(strokeWidth = 3))
-```
-
-### Baseline global vegetable-oil supply (from USDA PSD)
-
-The baseline market size $Q_0$ comes from the USDA Foreign Agricultural Service [Production, Supply and Distribution (PSD) database](https://apps.fas.usda.gov/psdonline/) [@usdapsd], the dataset behind the *Oilseeds: World Markets and Trade* circulars [@usda2025oilseeds]. We use the bulk-download oilseeds CSV (`data/usda_psd_oilseeds/psd_oilseeds_csv.zip`, retrieved 2026-07-31), which reports country-level supply and distribution by commodity and marketing year; world totals are sums across countries. We take world production of the four major oil crops over which the Chen et al. [@chen2026] elasticities are defined — palm, soybean, rapeseed, and sunflowerseed oil — for 2024/25, the most recent complete marketing year. (PSD estimates are continuously revised, so these values differ slightly from the printed May 2025 circular.)
+$Q_0$ is world production of the four oils in 2024/25, summed across countries from the USDA Foreign Agricultural Service's PSD oilseeds dataset (`data/usda_psd_oilseeds/psd_oilseeds_csv.zip`, retrieved 2026-07-31) [@usdapsd]. PSD estimates are revised continuously, so these differ slightly from the printed May 2025 circular [@usda2025oilseeds].
 
 ```{r}
 #| label: psd-q0
-#| message: false
-#| warning: false
 
 psd_zip_path <- file.path("data", "usda_psd_oilseeds", "psd_oilseeds_csv.zip")
 psd <- utils::read.csv(unz(psd_zip_path, "psd_oilseeds.csv"))
@@ -318,40 +339,33 @@ knitr::kable(
   digits = 1,
   col.names = c("Commodity", "World production, 2024/25 (million t)"),
   caption = paste0(
-    "World production of the four major vegetable oils, summed from the ",
-    "USDA PSD oilseeds dataset. Total: ",
+    "World production of the four major vegetable oils (USDA PSD). Total: ",
     round(sum(psd_four_oils$production_mt), 1),
     " million t."
   )
 )
 ```
 
+### Land-use model inputs and outputs
+
+Model inputs are emLab's `land-based-solutions` data on Nextcloud (`data/parallelized/1_input/full`), read without modification. Simulation outputs (7 GB) stay out of the repository; `r/land_use_model/03_summarise_results.R` reduces them to country × scenario × year totals (`data/derived/land_use_country_results.csv.gz`) and 0.5° grid-square totals (`data/derived/land_use_grid_loss.csv.gz`), which this report reads. Map outlines are Natural Earth's 1:110m countries [@naturalearth], stored as plain coordinates by `r/make_basemap.R`.
+
 ## Results
 
-### Derived price shock
-
-We now apply the mapping from [Methods](#methods) to the ICCT demand series to estimate the annual vegetable-oil price shock attributable to marine biofuel demand. The only assumptions are the baseline market size $Q_0$ and the elasticity scenarios, set explicitly below.
+### Vegetable-oil price shock {#sec-results-price}
 
 ```{r}
 #| label: price-shock-parameters
-#| message: false
-#| warning: false
 
-# --- Parameters (see Methods for sourcing and caveats) ---
-
-# Baseline market size Q0: 2024/25 world production of the four major oil
-# crops over which the Chen et al. (2026) elasticities are defined, summed
-# from the USDA PSD dataset (psd_four_oils, see Data sources), converted
-# to billion liters at ~0.92 kg/L.
+# Q0: world production of the four oils (psd_four_oils), converted to billion liters at
+# 0.92 kg/L, ICCT's own soy-oil conversion (12.4 Mt = 13.5 billion L, ICCT Table A1).
 q0_mt <- sum(psd_four_oils$production_mt) # ~204 Mt
 oil_density_kg_l <- 0.92
 q0_billion_liters <- q0_mt / oil_density_kg_l # ~221 billion L
 
-# Central elasticities (Chen et al. 2026). Demand: baseline demand
-# flexibility of -3.523 (Figure 2A row 1 / Table S1 col 3; 90% CI
-# [-5.3, -1.7]) inverts to eps_d = -0.284. Supply: long-run elasticities
-# w.r.t. the palm price of ~0.10 (palm) and ~0.13 (competing oil crops),
-# combined as a production-share-weighted average per their eps_S formula.
+# Central elasticities (Chen et al. 2026). Demand: flexibility of -3.523 (Table S1 col 3)
+# inverts to eps_d = -0.284. Supply: long-run 0.10 (palm) and 0.13 (competing oil crops)
+# (Fig. 2B rows 3-4), weighted by production share as in their eps_S formula.
 demand_flexibility_chen <- -3.523
 eps_d_chen <- 1 / demand_flexibility_chen
 share_palm <- psd_four_oils$production_mt[
@@ -360,8 +374,7 @@ share_palm <- psd_four_oils$production_mt[
   q0_mt
 eps_s_chen <- 0.10 * share_palm + 0.13 * (1 - share_palm)
 
-# Sensitivity: Roberts & Schlenker (2013) staple-food elasticities, whose
-# much less elastic demand gives a larger multiplier.
+# Sensitivity: Roberts & Schlenker (2013) staple-food elasticities (Table 1).
 eps_s_rs <- 0.10
 eps_d_rs <- -0.05
 
@@ -369,36 +382,11 @@ eps_d_rs <- -0.05
 m_chen <- 1 / (eps_s_chen - eps_d_chen) # ~2.5
 m_rs <- 1 / (eps_s_rs - eps_d_rs) # ~6.7
 
-scenario_params <- tibble::tribble(
-  ~scenario     , ~source                                              , ~eps_s     , ~eps_d     , ~multiplier ,
-  "Central"     , "Chen, Sexton & Smith (2026): vegetable-oil complex" , eps_s_chen , eps_d_chen , m_chen      ,
-  "Sensitivity" , "Roberts & Schlenker (2013): staple-food calories"   , eps_s_rs   , eps_d_rs   , m_rs
-)
-
-knitr::kable(
-  scenario_params,
-  digits = 2,
-  col.names = c(
-    "Scenario",
-    "Elasticity source",
-    "Supply elasticity (ε_s)",
-    "Demand elasticity (ε_d)",
-    "Multiplier M"
-  )
-)
-```
-
-Before applying the multipliers to our series, we check that each one recovers its source paper's own headline price effect:
-
-```{r}
-#| label: price-shock-validation
-#| message: false
-#| warning: false
-
+# Check: each multiplier should recover its source paper's own headline price effect.
 validation <- tibble::tribble(
-  ~check                                                        , ~shock_pct , ~m     , ~reported                    ,
-  "Chen et al.: BBD was 8.5% of vegetable-oil use, 2002-2018"   , 8.5        , m_chen , "21.2% (90% CI: 12.2-28.5%)" ,
-  "Roberts & Schlenker: ethanol mandate = 5% of world calories" , 5.0        , m_rs   , "~30% (range 29-39%)"
+  ~check                                                        , ~shock_pct , ~m     , ~reported                                  ,
+  "Chen et al.: biofuels used 8.5% of vegetable oil, 2002-2018" , 8.5        , m_chen , "21.2% (90% CI: 12.2-28.5%)"               ,
+  "Roberts & Schlenker: ethanol mandate = 5% of world calories" , 5.0        , m_rs   , "about 30% (5% x their multipliers: 29-39%)"
 ) |>
   dplyr::mutate(implied_pct = round(shock_pct * m, 1)) |>
   dplyr::select(check, shock_pct, implied_pct, reported)
@@ -406,25 +394,23 @@ validation <- tibble::tribble(
 knitr::kable(
   validation,
   col.names = c(
-    "Validation case",
-    "Demand shock (% of market)",
+    "Check",
+    "Demand shift (% of market)",
     "Implied %ΔP (our formula)",
-    "Paper's reported %ΔP"
+    "Paper's result"
+  ),
+  caption = paste0(
+    "Multipliers: central M = ", round(m_chen, 2), " (Chen et al.), sensitivity M = ",
+    round(m_rs, 2), " (Roberts & Schlenker). Both recover their source's headline result."
   )
 )
 ```
 
-Both checks land within the papers' reported ranges. Applying the multipliers to the ICCT series:
-
 ```{r}
 #| label: derive-price-shock
-#| message: false
-#| warning: false
 
-# %ΔP_t = (D_t / Q0) * M, expressed as a percent. The demand share is the
-# outward demand shift as a fraction of the whole vegetable-oil market.
-# beyond_marginal flags years where the shift exceeds ~25% of the market,
-# outside the regime where a constant-elasticity approximation is reliable.
+# %ΔP_t = (D_t / Q0) * M, expressed as a percent. beyond_marginal flags years where the shift
+# exceeds 25% of the market, outside the regime where the approximation is reliable.
 price_shock <- icct_table_1 |>
   dplyr::transmute(
     year,
@@ -434,65 +420,57 @@ price_shock <- icct_table_1 |>
     pct_delta_p_high = demand_share_pct * m_rs,
     beyond_marginal = demand_share_pct > 25
   )
-```
 
-```{r}
-#| label: price-shock-table
-#| message: false
-#| warning: false
-
-DT::datatable(
+knitr::kable(
   price_shock |>
-    dplyr::mutate(
-      dplyr::across(where(is.numeric), \(x) round(x, 1)),
-      beyond_marginal = ifelse(beyond_marginal, "yes", "")
-    ),
-  rownames = FALSE,
-  colnames = c(
+    dplyr::mutate(beyond_marginal = ifelse(beyond_marginal, "yes", "")),
+  digits = 1,
+  col.names = c(
     "Year",
     "VO demand (billion L)",
-    "Demand share of market (%)",
-    "%ΔP central (Chen, M≈2.5)",
-    "%ΔP sensitivity (Roberts-Schlenker, M≈6.7)",
-    "Beyond marginal regime"
+    "Share of market (%)",
+    "%ΔP, central",
+    "%ΔP, sensitivity",
+    "Beyond marginal"
   ),
-  caption = "Projected vegetable-oil price shock attributable to marine biofuel demand. The central column uses the Chen et al. (2026) elasticities; the sensitivity column uses Roberts & Schlenker (2013). Years flagged 'beyond marginal regime' (demand share > 25% of the market, from ~2032) exceed the range where the constant-elasticity approximation is reliable; treat those values as indicative of direction and scale, not precise magnitudes.",
-  options = list(pageLength = 10, scrollX = TRUE, dom = "t")
+  caption = "Vegetable-oil price shock from marine biofuel demand. Rows flagged 'beyond marginal' indicate direction and scale only."
 )
 ```
 
 ```{r}
 #| label: price-shock-timeseries
-#| message: false
-#| warning: false
+#| fig-width: 7.5
+#| fig-height: 4
 
-dygraphs::dygraph(
-  price_shock |> dplyr::select(year, pct_delta_p_central, pct_delta_p_high),
-  main = "Projected vegetable-oil price shock from marine biofuel demand",
-  ylab = "% change in vegetable oil price"
-) |>
-  dygraphs::dySeries(
-    "pct_delta_p_high",
-    label = "Sensitivity (Roberts-Schlenker, M≈6.7)"
-  ) |>
-  dygraphs::dySeries("pct_delta_p_central", label = "Central (Chen, M≈2.5)") |>
-  dygraphs::dyOptions(strokeWidth = 2, drawPoints = TRUE, pointSize = 3) |>
-  dygraphs::dyLegend(show = "always") |>
-  dygraphs::dyHighlight(highlightSeriesOpts = list(strokeWidth = 3))
+price_shock_long <- rbind(
+  data.frame(year = price_shock$year, scenario = "Central", pct = price_shock$pct_delta_p_central),
+  data.frame(year = price_shock$year, scenario = "Sensitivity", pct = price_shock$pct_delta_p_high)
+)
+
+scenario_labels <- c(Central = "Central (Chen et al.)", Sensitivity = "Sensitivity (Roberts & Schlenker)")
+
+ggplot2::ggplot(price_shock_long, ggplot2::aes(year, pct, colour = scenario, fill = scenario)) +
+  ggplot2::geom_line(linewidth = 0.8) +
+  ggplot2::geom_point(shape = 21, size = 2.8, stroke = 0.8, colour = col_surface) +
+  ggplot2::scale_colour_manual(values = col_scenario, labels = scenario_labels, name = NULL) +
+  ggplot2::scale_fill_manual(values = col_scenario, labels = scenario_labels, name = NULL) +
+  ggplot2::scale_y_continuous(labels = scales::label_comma(suffix = "%")) +
+  ggplot2::scale_x_continuous(breaks = price_shock$year) +
+  ggplot2::labs(
+    title = "Vegetable-oil price shock from marine biofuel demand",
+    x = NULL,
+    y = "Change in vegetable-oil price"
+  ) +
+  theme_report()
 ```
 
-From about 2032 on, marine demand becomes a large fraction of the baseline market, where the constant-elasticity approximation is unreliable and, if anything, understates the true response.
-
-### Hand-off to the land-use model
-
-The land-use model takes a single price shock: the central (Chen) estimate for 2035, the final year of the ICCT projection (see [Methods](#a-common-price-shock-across-oils)). This same percentage is applied to each vegetable-oil crop price (palm, soy, canola) in the marine-demand scenario's price matrix.
+The land-use model takes the 2035 values: the central shock, with the sensitivity as a second scenario.
 
 ```{r}
 #| label: export-price-shock
-#| message: false
-#| warning: false
 
-# Hand-off to the price -> ILUC land-use model (full precision, no rounding).
+# Hand-off to the land-use model (full precision, no rounding). 01_prepare_data.R reads
+# vegetable_oil_price_shock_2035.csv.
 handoff_2035 <- price_shock |> dplyr::filter(year == 2035)
 
 dir.create(file.path("data", "derived"), showWarnings = FALSE, recursive = TRUE)
@@ -509,7 +487,7 @@ utils::write.csv(
 
 cat(sprintf(
   paste0(
-    "2035 hand-off: VO demand %.0f billion L on a Q0 of %.0f billion L ",
+    "2035: VO demand %.0f billion L on a Q0 of %.0f billion L ",
     "(demand share %.0f%%) x multiplier %.2f = central price shock of +%.0f%%."
   ),
   handoff_2035$vo_demand_billion_liters,
@@ -520,24 +498,297 @@ cat(sprintf(
 ))
 ```
 
-The 2035 demand share is far beyond the marginal regime, so the central shock should be read as "the price response is very large — a multiple of baseline prices" rather than as a point estimate; the land-use model runs will carry this caveat with them. The exported `pct_delta_p_central` column in `data/derived/vegetable_oil_price_shock_2035.csv` is the input to the next step of the analysis: converting the price shock into ILUC area and emissions.
+### Forest loss {#sec-results-forest}
 
-## Discussion
+Additional forest loss is BAU forest minus scenario forest, so it accumulates over time. The difference in the final year is the cumulative additional emissions over the whole horizon.
 
-*Discussion of findings will go here.*
+```{r}
+#| label: forest-loss-global
 
-## Next steps: land-use model checklist
+horizons <- c(2035, 2050, final_year)
+global_table <- global_loss |>
+  dplyr::filter(year %in% horizons) |>
+  dplyr::mutate(
+    years_after_shock = year - min(lum$year),
+    carbon_gt = carbon_loss / 1e9,
+    area_mha = area_loss / 1e6,
+    pct_of_bau_carbon = 100 * carbon_loss / carbon_bau
+  )
 
-Personal to-do list for wiring the price shock into the land-use model:
+knitr::kable(
+  data.frame(
+    "Years after shock" = global_table$years_after_shock[global_table$scenario == "vo_central"],
+    "Central: Gt CO₂" = global_table$carbon_gt[global_table$scenario == "vo_central"],
+    "Central: Mha" = global_table$area_mha[global_table$scenario == "vo_central"],
+    "Central: % of BAU forest carbon" = global_table$pct_of_bau_carbon[global_table$scenario == "vo_central"],
+    "Sensitivity: Gt CO₂" = global_table$carbon_gt[global_table$scenario == "vo_high"],
+    "Sensitivity: Mha" = global_table$area_mha[global_table$scenario == "vo_high"],
+    check.names = FALSE
+  ),
+  digits = 2,
+  caption = "Cumulative additional forest loss relative to BAU, all countries."
+)
+```
 
-- [x] Bring the land-use model pipeline into this repo. Rather than forking the whole (large, messy) [land-based-solutions](https://github.com/emlab-ucsb/land-based-solutions) repo, the 17 scripts in [r/robert_test/parallelization](https://github.com/emlab-ucsb/land-based-solutions/tree/main/r/robert_test/parallelization) plus the `r/directories.R` path helper they all source were copied to `r/land_use_model/`. This is a deliberate copy rather than a fork or subtree, since the scripts diverge from upstream immediately and permanently. Upstream repo, path, and commit are recorded in `r/land_use_model/PROVENANCE.md`, along with a read-only `gh` snippet for diffing against upstream to check whether anything relevant has changed
-- [ ] Create a new Nextcloud folder for this project; copy in inputs from the parallelization directory (`1_input/full`)
-- [ ] Source packages and simulation functions
-- [ ] Modify `01_prepare_data.R` — the only script that needs changes: set the carbon price to 0 everywhere, and add a new input near the top of the script holding the scenario prices. Structure it as a vector of price vectors: the overarching vector has one element per scenario, and each scenario element is a price vector covering all of the different crop prices, adjusted from the baseline prices by whatever price shock that scenario applies (BAU = baseline, unshocked)
-- [ ] Once in the code and building the price matrices, check **which exact oils/crops the land-use model includes**, and confirm that list is consistent with the oils behind the Chen elasticities and our $Q_0$ (palm, soybean, rapeseed/canola, sunflower). If the model's crop list differs — e.g. it omits sunflower, or splits rapeseed and canola — decide whether to shock only the overlapping crops or to recompute $Q_0$ over the model's crop set, so the demand share and the shocked prices refer to the same market
-- [ ] Just to get things running: try no price shocks, no carbon price
-- [ ] Then shock vegetable oil prices (palm, soy, canola), all by 20%, just as a test
-- [ ] Then shock vegetable oil prices (palm, soy, canola), all by the exact % determined by our elasticities and demand (`pct_delta_p_central` in `data/derived/vegetable_oil_price_shock_2035.csv`)
+```{r}
+#| label: forest-loss-timeseries
+#| fig-width: 7.5
+#| fig-height: 4
+
+global_ts <- global_loss |>
+  dplyr::filter(scenario %in% c("vo_central", "vo_high")) |>
+  dplyr::mutate(
+    years_after_shock = year - min(lum$year),
+    scenario = ifelse(scenario == "vo_central", "Central", "Sensitivity"),
+    carbon_gt = carbon_loss / 1e9
+  )
+
+ggplot2::ggplot(global_ts, ggplot2::aes(years_after_shock, carbon_gt, colour = scenario)) +
+  ggplot2::geom_line(linewidth = 0.8) +
+  ggplot2::scale_colour_manual(values = col_scenario, labels = scenario_labels, name = NULL) +
+  ggplot2::scale_x_continuous(breaks = seq(0, 150, 25), expand = ggplot2::expansion(mult = c(0, 0.02))) +
+  ggplot2::scale_y_continuous(expand = ggplot2::expansion(mult = c(0, 0.05))) +
+  ggplot2::labs(
+    title = "Cumulative additional forest carbon loss relative to BAU",
+    x = "Years after the price shock",
+    y = expression("Gt CO"[2])
+  ) +
+  theme_report()
+```
+
+The effect arrives early but keeps growing: `r fmt0(100 * gl("vo_central", 2035, "carbon_loss") / gl("vo_central", final_year, "carbon_loss"))`% of the full-horizon central loss occurs within 15 years of the shock.
+
+#### Where the loss falls
+
+```{r}
+#| label: forest-loss-grid-map
+#| column: body-outset
+#| fig-width: 10
+#| fig-height: 4.4
+#| fig-cap: "Cumulative additional forest carbon loss under the central scenario over the full horizon, per 0.5° grid square. Gray squares have modeled forest but less than 1 kt CO₂ of additional loss."
+
+grid <- utils::read.csv(file.path("data", "derived", "land_use_grid_loss.csv.gz"))
+grid_classes <- c("< 1", "1–10", "10–100", "100–500", "500–1,000", "1,000–2,500", "≥ 2,500")
+grid$class <- factor(
+  cut(grid$loss_vo_central_tco2 / 1e3, c(-Inf, 1, 10, 100, 500, 1000, 2500, Inf), right = FALSE, labels = grid_classes),
+  levels = grid_classes
+)
+
+ggplot2::ggplot() +
+  ggplot2::geom_polygon(
+    data = basemap,
+    ggplot2::aes(lon, lat, group = piece, subgroup = ring),
+    fill = col_land, colour = col_surface, linewidth = 0.2
+  ) +
+  ggplot2::geom_tile(data = grid, ggplot2::aes(lon, lat, fill = class), width = 0.5, height = 0.5) +
+  ggplot2::scale_fill_manual(
+    values = stats::setNames(c("#d6d4cc", blue_ramp[2:7]), grid_classes),
+    name = expression("Additional loss (kt CO"[2] * " per square)"),
+    drop = FALSE,
+    guide = ggplot2::guide_legend(nrow = 1, title.position = "top", label.position = "bottom", keywidth = ggplot2::unit(1.6, "cm"), keyheight = ggplot2::unit(0.3, "cm"))
+  ) +
+  ggplot2::coord_quickmap(xlim = c(-170, 180), ylim = c(-45, 62), expand = FALSE) +
+  theme_map()
+```
+
+```{r}
+#| label: forest-loss-country-map
+#| column: body-outset
+#| fig-width: 10
+#| fig-height: 4.4
+#| fig-cap: "Cumulative additional forest carbon loss under the central scenario over the full horizon, by country. Where the model pools neighboring countries into one region, each member shows the region's total; all such regions lose less than 1 Mt CO₂."
+
+country_classes <- c("< 1", "1–10", "10–50", "50–100", "100–500", "≥ 500")
+country_map <- central_final |>
+  dplyr::filter(carbon_loss > 0) |>
+  dplyr::transmute(
+    model_country = country,
+    class = factor(
+      cut(carbon_loss / 1e6, c(-Inf, 1, 10, 50, 100, 500, Inf), right = FALSE, labels = country_classes),
+      levels = country_classes
+    )
+  )
+basemap_country <- dplyr::left_join(basemap, country_map, by = "model_country")
+
+ggplot2::ggplot(basemap_country, ggplot2::aes(lon, lat, group = piece, subgroup = ring, fill = class)) +
+  ggplot2::geom_polygon(colour = col_surface, linewidth = 0.2) +
+  ggplot2::scale_fill_manual(
+    values = stats::setNames(blue_ramp[2:7], country_classes),
+    na.value = col_land,
+    na.translate = FALSE,
+    name = expression("Additional loss (Mt CO"[2] * ")"),
+    drop = FALSE,
+    guide = ggplot2::guide_legend(nrow = 1, title.position = "top", label.position = "bottom", keywidth = ggplot2::unit(1.6, "cm"), keyheight = ggplot2::unit(0.3, "cm"))
+  ) +
+  ggplot2::coord_quickmap(xlim = c(-170, 180), ylim = c(-45, 62), expand = FALSE) +
+  theme_map()
+```
+
+#### By country and crop
+
+Running the central shock for each crop alone splits the loss by crop. Palm accounts for `r fmt0(100 * crop_split[["palm"]] / sum(crop_split))`% of it and soybeans for `r fmt0(100 * crop_split[["soy"]] / sum(crop_split))`%. The two single-crop runs add up to the joint run to within `r formatC(abs(interaction_pct), format = "f", digits = 2)`%, so the split is effectively additive.
+
+```{r}
+#| label: forest-loss-country-chart
+#| fig-width: 7.5
+#| fig-height: 5.2
+
+top_n <- 12
+top_countries <- central_final$country[seq_len(top_n)]
+other_label <- sprintf("Other %d countries", sum(central_final$carbon_loss > 0) - top_n)
+
+crop_by_country <- country_final |>
+  dplyr::filter(scenario %in% c("vo_central_palm", "vo_central_soy")) |>
+  dplyr::mutate(
+    label = ifelse(country %in% top_countries, country, other_label),
+    crop = ifelse(scenario == "vo_central_palm", "Oil palm", "Soybeans")
+  ) |>
+  dplyr::summarise(mt = sum(carbon_loss) / 1e6, .by = c(label, crop)) |>
+  dplyr::mutate(label = factor(label, levels = rev(c(top_countries, other_label))))
+bar_totals <- crop_by_country |> dplyr::summarise(mt = sum(mt), .by = label)
+
+ggplot2::ggplot(crop_by_country, ggplot2::aes(mt, label)) +
+  ggplot2::geom_col(
+    ggplot2::aes(fill = crop),
+    position = ggplot2::position_stack(reverse = TRUE), # palm first, from zero
+    width = 0.62, colour = col_surface, linewidth = 0.4
+  ) +
+  ggplot2::geom_text(data = bar_totals, ggplot2::aes(label = fmt0(mt)), hjust = -0.2, size = 3.2, colour = "#0b0b0b") +
+  ggplot2::scale_fill_manual(values = col_crop, name = NULL) +
+  ggplot2::scale_x_continuous(labels = scales::label_comma(), expand = ggplot2::expansion(mult = c(0, 0.1))) +
+  ggplot2::labs(
+    title = "Additional forest carbon loss by country and crop",
+    subtitle = "Central scenario, full horizon",
+    x = expression("Mt CO"[2]),
+    y = NULL
+  ) +
+  theme_report() +
+  ggplot2::theme(panel.grid.major.y = ggplot2::element_blank())
+```
+
+```{r}
+#| label: forest-loss-country-table
+
+country_table <- country_final |>
+  dplyr::filter(carbon_loss > 0) |>
+  dplyr::select(country, scenario, carbon_loss, area_loss, area_bau, share)
+by_scenario <- function(scn, ...) {
+  country_table |> dplyr::filter(scenario == scn) |> dplyr::select(country, ...)
+}
+country_table <- by_scenario("vo_central", carbon_loss, area_loss, area_bau, share) |>
+  dplyr::left_join(by_scenario("vo_central_palm", carbon_palm = carbon_loss), by = "country") |>
+  dplyr::left_join(by_scenario("vo_central_soy", carbon_soy = carbon_loss), by = "country") |>
+  dplyr::left_join(by_scenario("vo_high", carbon_high = carbon_loss), by = "country") |>
+  dplyr::transmute(
+    country,
+    carbon_mt = carbon_loss / 1e6,
+    palm_mt = dplyr::coalesce(carbon_palm, 0) / 1e6,
+    soy_mt = dplyr::coalesce(carbon_soy, 0) / 1e6,
+    area_kha = area_loss / 1e3,
+    share_pct = 100 * share,
+    pct_of_bau_area = 100 * area_loss / area_bau,
+    carbon_mt_high = dplyr::coalesce(carbon_high, 0) / 1e6
+  ) |>
+  dplyr::arrange(dplyr::desc(carbon_mt))
+
+DT::datatable(
+  country_table,
+  rownames = FALSE,
+  colnames = c(
+    "Country",
+    "Central: Mt CO₂",
+    "of which palm",
+    "of which soybeans",
+    "Central: thousand ha",
+    "Central: share of total (%)",
+    "Central: % of country's BAU forest",
+    "Sensitivity: Mt CO₂"
+  ),
+  caption = "Cumulative additional forest loss relative to BAU over the full horizon, by country. Palm and soybean columns are the single-crop runs.",
+  options = list(pageLength = 10, scrollX = TRUE)
+) |>
+  DT::formatRound(c("carbon_mt", "palm_mt", "soy_mt", "area_kha", "share_pct", "pct_of_bau_area", "carbon_mt_high"), digits = 1)
+```
+
+- **Concentration.** `r sum(central_final$carbon_loss > 0)` countries lose additional forest, but `r central_final$country[1]`, `r central_final$country[2]` and `r central_final$country[3]` account for `r fmt0(100 * sum(central_final$share[1:3]))`% of the full-horizon loss. Only cells whose harvest shares include oil palm or soybeans respond, since those are the only prices that change.
+- **Some catch-up.** Cleared forest never regrows, so BAU can later clear forest the shocked scenario already cleared. In Malaysia additional loss peaks at `r fmt0(mys$peak / 1e6)` Mt CO₂ in model year `r mys$peak_year` and narrows to `r fmt0(mys$final / 1e6)` Mt CO₂ by `r final_year`; `r n_narrowing` countries narrow by more than 5% from their peak. Globally, additional loss is still growing at the end of the horizon. The ILUC step will need to treat this timing explicitly.
+
+## Caveats and next steps
+
+**Next steps**
+
+- Convert the additional emissions into an ILUC carbon intensity (g CO₂e/MJ) and decompose it by country (stacked bar).
+- Diff our model copy against upstream (snippet in `r/land_use_model/PROVENANCE.md`); the upstream team has refactored since our 31 July 2026 copy.
+
+**What the estimates leave out or assume**
+
+- **Forest carbon only.** Peat, soil carbon and foregone sequestration are not counted. In Chen et al., peat was 614 of 1,086 Tg CO₂e of net ILUC emissions [@chen2026], so this matters most for Indonesia and Malaysia. Understates.
+- **Rapeseed and sunflower** are not in the model. Understates.
+- **Price shock beyond the marginal regime.** The constant-elasticity formula is a local approximation; at a 63% demand share the true response is probably larger.
+- **Soybean pass-through** is an accounting share (0.353), not an estimated market response.
+- **No meal adjustment** to the oil-price shock. Overstates.
+- **Supply-response consistency.** The price step assumes $\varepsilon_s \approx 0.12$; the land-use model's own supply response has not been checked against it.
+- **Permanent shock from the first model year** and no forest regrowth, as described in [Methods](#sec-land-use-model).
+
+## Appendix A: Changes to the land-use model code {#sec-lum-changes}
+
+Every change made to the emLab land-use model to run the price-shock scenarios, listed for review by the model's authors. Starting point: upstream `emlab-ucsb/land-based-solutions`, `r/robert_test/parallelization/` at commit `e207c2b` (31 July 2026), copied to `r/land_use_model/` (see `r/land_use_model/PROVENANCE.md`). Anything not listed here is unchanged.
+
+**Unchanged:** `simulation_functions.R` (including `update_revenues()` and `simulate_10_dt()`), `packages.R`, `r/directories.R` (now only read from, via `paths.R`), the deforestation model and its coefficients, and the fixed-effect construction (pixel FEs, the 2016–2020 country-year FE window, asymmetric-information FEs).
+
+**All scripts**
+
+1. `r/robert_test/parallelization/` → `r/land_use_model/` in every `here::here()` path.
+
+**New file: `paths.R`**
+
+2. Defines the input root `input_wdir`, read via `r/directories.R` as `{data_directory}/parallelized` and treated as read-only, and the output root `wdir`, the repo's git-ignored `land_use_model_runs/`. It stops if `wdir` is inside any Nextcloud folder or inside the inputs. This is so our outputs can't sync over the shared Nextcloud files of the same name.
+
+**`01_prepare_data.R`**
+
+3. Carbon price fixed at 0: `CP_LIST` (10 carbon prices) replaced by `CP <- 0`.
+4. New input `PRICE_SHOCKS` (Section 1): % price change per shocked crop, one element per scenario, with `bau` first and unshocked. Scenarios: `bau`; `vo_20pct` (smoke test, `Oil, palm` and `Soybeans` both +20%); `vo_central` and `vo_high`, built from the 2035 shocks read from `data/derived/vegetable_oil_price_shock_2035.csv` (`pct_delta_p_central`, `pct_delta_p_high`), with `Oil, palm` taking the full shock and `Soybeans` taking `SOY_OIL_VALUE_SHARE` (0.353, Janzen & Wang 2025) of it; and `vo_central_palm` and `vo_central_soy`, the central shock applied to one crop at a time, for crop attribution. Sources for every number are in [Methods](#sec-mapping).
+5. New Section 2b: expands `PRICE_SHOCKS` into `PRICE_SCENARIOS`, one full 17-crop price vector per scenario, starting from the `CPrice == 0` rows of `final_prices_allcp`. Writes `price_scenarios.csv`. Stops if a shocked crop isn't in the model, or if any crop in `endo_input_data` has no price.
+6. Section 6: `update_revenues()` runs once per price scenario (`revenue_<scenario>` columns) instead of once per carbon price (`revenue_cp<P>`). BAU revenue is computed the same way instead of being taken from `data_past$revenue`, so every scenario uses one formula. The two BAU versions agree to ~1e-12, and the script prints that check on every run.
+7. Section 8: chunk files carry `revenue_<scenario>` columns in place of `revenue_cp0` and `revenue_cp<P>`.
+8. Section 8: the per-pixel attributes file `grid_smry.csv` also carries `lat` and `lon`, for mapping.
+9. Section 11: `model_params.rds` stores `cp` and `price_scenarios` in place of `cp_list`.
+10. Paths come from `paths.R` instead of the hard-coded `/Users/rheilmayr/Nextcloud/...` `wdir`, which upstream used for both inputs and outputs.
+
+**`02_run_simulations.R`**
+
+11. The 38 distinct simulations (56 labeled blocks across endog/exog, fi/fi_bl_vp/ai_bl_vp and carbon price) are replaced by one `simulate_10_dt()` run per price scenario, at `cp = 0` with `pixel_fe`. This is the same construction as upstream's `endog_fi_blvp` runs, $D(0, V(P))$, with scenario prices in place of carbon-price equilibrium prices.
+12. Output parquet columns are `scn, pixel_id, year, biomass` (upstream: `crp_price, cprice, pixel_id, year, info, biomass`). The row-count check is now pixels × scenarios × years.
+13. Paths come from `paths.R`, as in `01`.
+
+**Disabled scripts**
+
+14. `00_generate_sample_data.R`, `00c_run_cobweb.R`, `01b_prepare_uncertainty_draws.R`, `02b_run_simulations_uncertainty.R`, and `03_aggregate_results.R` through `09_conceptual_diagrams.R` (including `03b`) have a `stop()` as their first line. They still expect upstream's carbon-price outputs and use upstream's hard-coded paths, which on a colleague's machine point at the shared Nextcloud folder. `00` and `00c` write into `1_input/` itself. Each `stop()` comes out only when that script is adapted to `paths.R`.
+
+**New file: `03_summarise_results.R`**
+
+15. Reduces `02`'s per-pixel results to two files for the report, pairing each result file with its chunk file for each pixel's `country` and `CF`:
+    - `data/derived/land_use_country_results.csv.gz`: country × scenario × year totals of forest carbon (`sum(biomass)`, t CO₂) and forest area (`sum(biomass / CF)`, ha, using upstream's `ha_per_pixel = CF_pix / CF`).
+    - `data/derived/land_use_grid_loss.csv.gz`: per 0.5° grid square (from `grid_smry.csv` coordinates), 2020 forest carbon and final-year additional loss relative to BAU for each scenario.
+
+    Stops if BAU 2020 forest carbon doesn't match `01`'s `grid_smry.csv`, or if any scenario's gridded loss doesn't sum to its country-level loss.
+
+**`run_pipeline.R`**
+
+16. `STAGES` runs `01` → `02` → `03_summarise_results.R`; upstream stages `03`–`07` are commented out.
+
+**Verification** (200-pixel sample inputs, `1_input/smpl`):
+
+- BAU emissions per pixel, annualized the same way as `03`'s `bl_emit_co2_y`, match upstream's reference run (`5_validation/sim_results_exog_ref_smpl.csv`) to within 0.003% for all 201 pixels.
+- `vo_20pct` biomass is never higher than BAU, and is lower in the 110 of 201 pixels that grow palm or soy.
+
+**Verification** (full inputs, `1_input/full`, 1,450,769 pixels):
+
+- BAU revenue recomputed with `update_revenues()` matches upstream's `data_past$revenue` to within 7e-12.
+- At every pixel, final-year (2171) biomass is never higher under a shock than under BAU, and never higher under `vo_high` than under `vo_central`. The shocks affect 711,420 pixels, those with a palm or soybean harvest share.
+- `vo_central_palm` and `vo_central_soy` sum to `vo_central` to within 0.04% of its additional loss, 15 years after the shock and at the end of the horizon.
+- `03_summarise_results.R`: BAU 2020 forest carbon summed by country equals `01`'s per-pixel 2020 biomass, and each scenario's gridded loss equals its country-level loss.
+- Runtime on a 64 GB laptop, six scenarios: `01` 241 s (peak memory ~27 GB), `02` 145 s, `03_summarise_results.R` 43 s.
 
 ## References
 
