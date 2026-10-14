@@ -21,6 +21,11 @@
 # RNG state was inherited from earlier blocks; with 1000 samples the ecdf curves are stable, so the
 # figures are visually equivalent. Change SEED if you want to match a specific earlier rendering.)
 
+# DISABLED in this repo (not adapted): this script still expects upstream's carbon-price outputs and
+# uses upstream's hard-coded paths, which on a colleague's machine point at the shared Nextcloud
+# folder. Remove this stop() only after adapting the script to source paths.R.
+stop("Not adapted for the price-shock pipeline; see report.qmd #sec-lum-changes")
+
 library(ggplot2)
 library(dplyr)
 library(tidyr)

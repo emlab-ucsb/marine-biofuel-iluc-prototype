@@ -64,6 +64,11 @@
 # Must match the USE_SAMPLE_DATA setting used in 01_prepare_data.R,
 # 01b_prepare_uncertainty_draws.R, and 02_run_simulations_uncertainty.R -- this script
 # reads their output directly.
+# DISABLED in this repo (not adapted): this script still expects upstream's carbon-price outputs and
+# uses upstream's hard-coded paths, which on a colleague's machine point at the shared Nextcloud
+# folder. Remove this stop() only after adapting the script to source paths.R.
+stop("Not adapted for the price-shock pipeline; see report.qmd #sec-lum-changes")
+
 USE_SAMPLE_DATA <- TRUE
 
 # For quick testing, limit how many draws get aggregated. Set to NULL to aggregate every

@@ -21,6 +21,11 @@
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 # SECTION 1: Configuration -----
 
+# DISABLED in this repo (not adapted): this script still expects upstream's carbon-price outputs and
+# uses upstream's hard-coded paths, which on a colleague's machine point at the shared Nextcloud
+# folder. Remove this stop() only after adapting the script to source paths.R.
+stop("Not adapted for the price-shock pipeline; see report.qmd #sec-lum-changes")
+
 source(here::here("r/land_use_model/packages.R"))
 options(scipen = 999)
 set.seed(93106)

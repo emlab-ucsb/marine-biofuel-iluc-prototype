@@ -14,10 +14,9 @@
 # 1. The main process reads a small manifest (file paths + row counts) and
 #    model parameters. No large data is loaded into the main process.
 # 2. Each parallel worker receives only a file path string (a few bytes).
-#    It reads its own ~7 MB chunk file, runs all simulation scenarios for BOTH crop-price
-#    regimes (crp_price = "endog" and "exog") — each regime has 1 actual baseline D(0,V(0))
-#    plus, per carbon price, the policy run D(P,V), the FI paid-for baseline, and the AI
-#    paid-for baseline — and writes its results to a result parquet file. The worker returns a small
+#    It reads its own ~7 MB chunk file, runs one simulation per crop-price scenario
+#    (carbon price 0, crop prices from that scenario's revenue column), and writes
+#    its results to a result parquet file. The worker returns a small
 #    summary — NOT the full simulation data — so the main process never holds
 #    more than one chunk's results in memory at a time.
 # 3. After all workers finish, the main process reads and combines the result
@@ -63,11 +62,8 @@ N_WORKERS <- min(N_WORKERS, parallel::detectCores() - 1L)
 cat("Using", N_WORKERS, "parallel workers",
     if (!is.na(mem_gb)) sprintf("(detected %.0f GB RAM)", mem_gb) else "(RAM undetected; conservative default)", "\n")
 
-# Directory paths
-wdir <- file.path('/Users/rheilmayr/Nextcloud/emlab/projects/current-projects/land-based-solutions/data/parallelized')
-#source(here::here("r/directories.R"))
-#wdir<- glue::glue("{data_directory}/parallelized")
-# wdir <- file.path('/Users/clatka/github/data/parallelized')
+# Directory paths: wdir (local outputs). See paths.R.
+source(here::here("r/land_use_model/paths.R"))
 
 
 processing_dir  <- file.path(wdir, "2_processing")
@@ -99,7 +95,8 @@ model_params <- readRDS(model_params_path)
 alpha   <- model_params$alpha
 beta    <- model_params$beta
 linkinv <- model_params$linkinv
-CP_LIST <- model_params$cp_list
+CP      <- model_params$cp
+PRICE_SCENARIOS <- model_params$price_scenarios
 YEARS   <- model_params$years
 NYEARS  <- model_params$nyears
 iota    <- model_params$iota
@@ -107,13 +104,13 @@ scc     <- model_params$scc
 scc_dly <- model_params$scc_dly
 
 # Derived simulation constants
-# Scenarios = 2 crop-price regimes (endog, exog), each with 1 actual baseline D(0,V(0))
-#   + 3 per carbon price (policy, FI paid-for baseline, AI paid-for baseline) = 2*(1 + 3*nCP).
-N_SCENARIOS       <- 2L * (1L + 3L * length(CP_LIST))
+# One simulation per crop-price scenario, all at carbon price CP (0).
+N_SCENARIOS       <- length(PRICE_SCENARIOS)
 N_YEARS_WITH_2020 <- NYEARS + 2L           # years vector covers 2021..2020+NYEARS, plus year 2020 added back
 
 cat("Manifest: ", nrow(manifest), "chunks\n")
-cat("CP_LIST: ", paste(CP_LIST, collapse = ", "), "\n")
+cat("Carbon price:", CP, "\n")
+cat("Price scenarios:", paste(PRICE_SCENARIOS, collapse = ", "), "\n")
 cat("Years: ", min(YEARS), "to", max(YEARS), "\n")
 
 
@@ -128,10 +125,10 @@ cat("Years: ", min(YEARS), "to", max(YEARS), "\n")
 #   - All failures are reported with informative error messages
 #
 # Parameters passed via closure (captured from Section 2):
-#   alpha, beta, linkinv, CP_LIST, YEARS, results_dir
+#   alpha, beta, linkinv, CP, PRICE_SCENARIOS, YEARS, results_dir
 
 run_chunk <- function(chunk_file, expected_n_rows, alpha, beta, linkinv,
-                      cp_list, years, results_dir) {
+                      cp, price_scenarios, years, results_dir) {
   # Wrap everything in tryCatch so a single failed chunk doesn't kill the whole run.
   # The error is returned as a structured list so the main process can report it clearly.
   tryCatch({
@@ -149,7 +146,7 @@ run_chunk <- function(chunk_file, expected_n_rows, alpha, beta, linkinv,
     critical_cols <- c("pixel_fe", "ai_pixel_fe", "yc_fe",
                        "lag_remaining_treecover", "remaining_treecover_share",
                        "pixel_count", "CF", "CF_pix",
-                       paste0("revenue_cp", c(0, cp_list)))
+                       paste0("revenue_", price_scenarios))
     for (col in critical_cols) {
       if (!col %in% names(chunk)) {
         stop(sprintf("Missing required column '%s' in %s", col, basename(chunk_file)))
@@ -162,95 +159,33 @@ run_chunk <- function(chunk_file, expected_n_rows, alpha, beta, linkinv,
     n_pixels_chunk <- nrow(chunk)
 
     # ---- RUN ALL SIMULATION SCENARIOS ----
-    # We produce results for BOTH crop-price regimes in one pass, tagged by crp_price:
-    #   "endog": crop prices respond to the carbon price, shifting from V(0) to V(P).
-    #   "exog" : crop prices are held at baseline V(0) for every carbon price (no feedback).
-    #
-    # Only 38 simulations are genuinely DISTINCT. Each is one simulate_10_dt() call (a forward
-    # simulation over all pixels in the chunk for a given carbon price + fixed-effect assumption):
-    #
-    #   object              simulate_10_dt args                  meaning        runs
-    #   ------------------  -----------------------------------  -------------  ----
-    #   sim_base_v0         cp=0, "revenue_cp0", "pixel_fe"      D(0,V(0))         1
-    #   sim_base_ai_v0      cp=0, "revenue_cp0", "ai_pixel_fe"   D_ai(0,V(0))      1
-    #   endog_policy   (9)  cp=P, "revenue_cpP", "pixel_fe"      D(P,V(P))         9
-    #   endog_fi_blvp  (9)  cp=0, "revenue_cpP", "pixel_fe"      D(0,V(P))         9
-    #   endog_ai_blvp  (9)  cp=0, "revenue_cpP", "ai_pixel_fe"   D_ai(0,V(P))      9
-    #   exog_policy    (9)  cp=P, "revenue_cp0", "pixel_fe"      D(P,V(0))         9
-    #                                                            distinct total = 38
-    #
-    # These are assembled into 56 LABELED blocks (28 endog + 28 exog). The 18 "extra" exog blocks
-    # are cheap RELABELED COPIES, not re-runs: under exog there is no leakage and no price-
-    # anticipation gap, so the exog FI/AI paid-for baselines and the exog cp=0 actual baseline are
-    # all P-independent and equal D(0,V(0)) / D_ai(0,V(0)) (i.e. sim_base_v0 / sim_base_ai_v0).
-    #   endog (28): sim_base_v0 -> (fi, cp=0); endog_policy -> (fi, P);
-    #               endog_fi_blvp -> (fi_bl_vp, P); endog_ai_blvp -> (ai_bl_vp, P).
-    #   exog  (28): sim_base_v0 -> (fi, cp=0) and (fi_bl_vp, every P)   [copies];
-    #               exog_policy -> (fi, P)                              [real runs];
-    #               sim_base_ai_v0 -> (ai_bl_vp, every P)               [copies].
-    #
-    # cp=0 is passed to simulate_10_dt for every baseline scenario so no carbon opportunity cost
-    # (cp*CF) is subtracted — only the revenue column carries the price regime.
-
-    # Helpers. lab() stamps the four scenario-id columns with dplyr::mutate (NOT data.table :=):
-    # dplyr verbs return a fresh frame and never modify the input in place, so relabeling a copy
-    # cannot corrupt the shared sim_base_v0 / sim_base_ai_v0. (:= would mutate in place — avoid it.)
-    sim_one <- function(cp, revenue_col, fe_col) {
+    # One simulate_10_dt() call per crop-price scenario: a forward simulation over all pixels in
+    # the chunk at carbon price cp (0) with full-information pixel fixed effects, where only the
+    # revenue column differs between scenarios. In upstream's notation each is D(0, V(s)) — the
+    # same construction as its endog_fi_blvp runs, with scenario s's crop prices in place of the
+    # carbon-price-equilibrium prices. "bau" is D(0, V(0)).
+    blocks <- lapply(price_scenarios, function(s) {
       simulate_10_dt(
         starting_data = chunk, cp = cp,
-        revenue_col   = revenue_col, fe_col = fe_col,
+        revenue_col   = paste0("revenue_", s), fe_col = "pixel_fe",
         years = years, alpha = alpha, beta = beta, linkinv = linkinv
-      )
-    }
-    lab <- function(df, info, cprice, crp_price) {
-      df %>% mutate(info = info, cprice = cprice, crp_price = crp_price,
-                    scn = paste(cprice, info, crp_price, sep = "_"))
-    }
-
-    # --- 38 genuinely-distinct simulations ---
-    sim_base_v0    <- sim_one(0L, "revenue_cp0", "pixel_fe")      # D(0, V(0))   shared actual baseline
-    sim_base_ai_v0 <- sim_one(0L, "revenue_cp0", "ai_pixel_fe")   # D_ai(0, V(0)) exog AI baseline
-    endog_policy   <- lapply(cp_list, function(cp) sim_one(cp, paste0("revenue_cp", cp), "pixel_fe"))     # D(P, V(P))
-    endog_fi_blvp  <- lapply(cp_list, function(cp) sim_one(0L, paste0("revenue_cp", cp), "pixel_fe"))     # D(0, V(P))
-    endog_ai_blvp  <- lapply(cp_list, function(cp) sim_one(0L, paste0("revenue_cp", cp), "ai_pixel_fe"))  # D_ai(0, V(P))
-    exog_policy    <- lapply(cp_list, function(cp) sim_one(cp, "revenue_cp0", "pixel_fe"))                # D(P, V(0))
-
-    # --- 56 labeled blocks (18 of the exog blocks are relabeled copies, not re-runs) ---
-    endog_blocks <- c(
-      list(lab(sim_base_v0, "fi", 0L, "endog")),
-      Map(function(d, cp) lab(d, "fi",       cp, "endog"), endog_policy,  cp_list),
-      Map(function(d, cp) lab(d, "fi_bl_vp", cp, "endog"), endog_fi_blvp, cp_list),
-      Map(function(d, cp) lab(d, "ai_bl_vp", cp, "endog"), endog_ai_blvp, cp_list)
-    )
-    exog_blocks <- c(
-      list(lab(sim_base_v0, "fi", 0L, "exog")),                                              # copy of D(0,V(0))
-      Map(function(d, cp) lab(d, "fi", cp, "exog"), exog_policy, cp_list),                    # real D(P,V(0))
-      lapply(cp_list, function(cp) lab(sim_base_v0,    "fi_bl_vp", cp, "exog")),              # copies: P-independent
-      lapply(cp_list, function(cp) lab(sim_base_ai_v0, "ai_bl_vp", cp, "exog"))               # copies: P-independent
-    )
-
-    # MEMORY: free the 38 distinct simulations now. lab() copies (dplyr::mutate), so the labeled
-    # blocks above are independent of these originals — dropping them here removes ~38 chunk-sized
-    # frames from the peak before the large bind below. (Per-chunk peak is the binding constraint
-    # at 56 scenarios; see N_WORKERS note in Section 1.)
-    rm(sim_base_v0, sim_base_ai_v0, endog_policy, endog_fi_blvp, endog_ai_blvp, exog_policy)
-    gc(FALSE)
+      )[, scn := s]
+    })
 
     # ---- ASSEMBLE SIMULATION RESULTS ----
     # data.table::rbindlist is more memory-efficient than dplyr::bind_rows over many data.tables.
-    # Free the block lists immediately after binding so only the combined frame remains.
-    for_shr <- data.table::rbindlist(c(endog_blocks, exog_blocks))
-    rm(endog_blocks, exog_blocks)
+    # Free the block list immediately after binding so only the combined frame remains.
+    for_shr <- data.table::rbindlist(blocks)
+    rm(blocks)
     gc(FALSE)
-    for_shr <- for_shr[, .(scn, pixel_id, year, remaining_treecover_share,
-                           cprice, info, crp_price)]
+    for_shr <- for_shr[, .(scn, pixel_id, year, remaining_treecover_share)]
 
     # ---- ADD YEAR-2020 INITIAL ROWS ----
     # The simulation produces years 2021 through 2020+NYEARS. We add one row per
     # (scenario, pixel) for year 2020 using the initial forest cover from the chunk.
     # This matches the initial_rows_2020 logic in simulation_workflow.R.
     initial_rows_2020 <- for_shr %>%
-      dplyr::select(scn, pixel_id, cprice, info, crp_price) %>%
+      dplyr::select(scn, pixel_id) %>%
       dplyr::distinct() %>%
       dplyr::left_join(
         chunk %>% dplyr::select(pixel_id, remaining_treecover_share),
@@ -273,12 +208,11 @@ run_chunk <- function(chunk_file, expected_n_rows, alpha, beta, linkinv,
       dplyr::mutate(biomass = remaining_treecover_share * CF_pix * pixel_count)
 
     sim_biomass_chunk <- for_shr %>%
-      dplyr::select(crp_price, cprice, pixel_id, year, info, biomass)
+      dplyr::select(scn, pixel_id, year, biomass)
 
     # ---- VALIDATE CHUNK OUTPUT ----
-    # Scenarios per pixel: 2 crop-price regimes (endog, exog), each with 1 actual baseline
-    # D(0,V(0)) + 3 per carbon price (policy, FI paid-for baseline, AI paid-for baseline).
-    n_scenarios       <- 2L * (1L + 3L * length(cp_list))
+    # Scenarios per pixel: one per crop-price scenario.
+    n_scenarios       <- length(price_scenarios)
     n_years_with_2020 <- length(years) + 1L
     expected_rows     <- n_pixels_chunk * n_scenarios * n_years_with_2020
 
@@ -297,7 +231,7 @@ run_chunk <- function(chunk_file, expected_n_rows, alpha, beta, linkinv,
         "NA values in biomass output for chunk %s: %d NA rows across scenarios %s, pixel_ids %s",
         basename(chunk_file),
         nrow(na_rows),
-        paste(unique(na_rows$cprice), collapse = ", "),
+        paste(unique(na_rows$scn), collapse = ", "),
         paste(head(unique(na_rows$pixel_id), 5), collapse = ", ")
       ))
     }
@@ -354,7 +288,8 @@ worker_results <- furrr::future_map(
       alpha          = alpha,
       beta           = beta,
       linkinv        = linkinv,
-      cp_list        = CP_LIST,
+      cp             = CP,
+      price_scenarios = PRICE_SCENARIOS,
       years          = YEARS,
       results_dir    = results_dir
     )

@@ -32,6 +32,11 @@
 
 # Toggle between sample (200 pixels) and full (~1.5M pixels) run.
 # Must match the USE_SAMPLE_DATA setting used in 01_prepare_data.R and 02_run_simulations.R.
+# DISABLED in this repo (not adapted): this script still expects upstream's carbon-price outputs and
+# uses upstream's hard-coded paths, which on a colleague's machine point at the shared Nextcloud
+# folder. Remove this stop() only after adapting the script to source paths.R.
+stop("Not adapted for the price-shock pipeline; see report.qmd #sec-lum-changes")
+
 USE_SAMPLE_DATA <- TRUE
 
 # Load packages and functions

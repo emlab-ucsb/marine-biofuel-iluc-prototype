@@ -54,3 +54,7 @@ rsconnect/
 
 /.quarto/
 **/*.quarto_ipynb
+
+# Land-use model run outputs (chunks, simulation results) and pipeline logs
+/land_use_model_runs/
+/r/land_use_model/logs/

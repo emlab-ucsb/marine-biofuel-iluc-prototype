@@ -22,7 +22,7 @@
 #   - Pixel identifiers and forest cover state variables
 #   - Pixel and country fixed effects (pre-extracted from model)
 #   - Asymmetric-info fixed effects (pre-computed regional medians)
-#   - Pre-computed revenues for ALL carbon price scenarios (one column each)
+#   - Pre-computed revenues for ALL crop-price scenarios (one column each)
 #     This avoids workers needing to load the large endo_input_data table.
 # - chunk_manifest.rds: metadata for 02_run_simulations.R (file paths, row counts)
 # - model_params.rds: model coefficients and configuration for workers
@@ -54,8 +54,46 @@ set.seed(93106)
 # Can increase if you run out of memory during chunk writing or downstream processing.
 N_CHUNKS <- 400
 
-# Carbon prices to simulate (must match 02_run_simulations.R)
-CP_LIST <- c(1, 10, 20, 40, 60, 80, 120, 160, 193, 200)
+# Carbon price: 0 in every scenario. This project replaces the upstream carbon-price scenarios
+# (CP_LIST) with crop-price scenarios — only the crop prices differ between scenarios.
+CP <- 0
+
+# Crop-price scenarios: the % change applied to each shocked crop's baseline price, one element
+# per scenario. Crops not listed stay at baseline. Baseline prices are the CPrice == 0 rows of
+# final_prices_allcp; Section 2b expands each element into a full price vector covering every
+# crop (PRICE_SCENARIOS). "bau" must be first and unshocked: every other scenario is
+# differenced against it downstream.
+#
+# The model's 17 crops include only two vegetable-oil crops: "Oil, palm" (priced per tonne of
+# palm oil) and "Soybeans" (priced per tonne of beans, not oil). Rapeseed/canola and sunflower
+# are not modeled. Palm takes the full vegetable-oil price shock. Soybeans take it scaled by
+# soybean oil's share of crush value, holding the meal price fixed: average per-bushel values
+# 2007-2025 of $4.72 (oil) and $8.66 (meal) (Janzen & Wang 2025, farmdoc daily 15:188; USDA AMS
+# Illinois plant prices, 11 lb oil and 48 lb meal per bushel). See report.qmd, "Mapping the shock
+# onto the land-use model's crops".
+SOY_OIL_VALUE_SHARE <- 4.72 / (4.72 + 8.66)
+
+# Vegetable-oil price shocks (%) for 2035 from the price-shock analysis in report.qmd: central
+# (Chen et al. elasticities) and high (Roberts & Schlenker sensitivity).
+vo_shock_2035 <- readr::read_csv(here::here("data/derived/vegetable_oil_price_shock_2035.csv"),
+                                 show_col_types = FALSE)
+stopifnot("Expected one 2035 row in vegetable_oil_price_shock_2035.csv" =
+            nrow(vo_shock_2035) == 1 && vo_shock_2035$year == 2035)
+
+vo_scenario <- function(pct_oil) {
+  c("Oil, palm" = pct_oil, "Soybeans" = SOY_OIL_VALUE_SHARE * pct_oil)
+}
+
+PRICE_SHOCKS <- list(
+  bau        = c(),
+  vo_20pct   = c("Oil, palm" = 20, "Soybeans" = 20),  # smoke test: uniform +20%, no soy pass-through
+  vo_central = vo_scenario(vo_shock_2035$pct_delta_p_central),
+  vo_high    = vo_scenario(vo_shock_2035$pct_delta_p_high),
+  # Crop attribution for the central shock: each crop's price shocked alone. The deforestation
+  # model is nonlinear, so palm-only + soy-only need not sum exactly to vo_central.
+  vo_central_palm = vo_scenario(vo_shock_2035$pct_delta_p_central)["Oil, palm"],
+  vo_central_soy  = vo_scenario(vo_shock_2035$pct_delta_p_central)["Soybeans"]
+)
 
 # Discount rate and social cost of carbon — shared across all three scripts via model_params.rds
 iota    <- 0.05
@@ -66,18 +104,13 @@ scc_dly <- scc * iota / (1 + iota)
 NYEARS <- 150
 YEARS  <- seq(2020L, 2020L + NYEARS)
 
-# Directory paths 
-wdir <- file.path('/Users/rheilmayr/Nextcloud/emlab/projects/current-projects/land-based-solutions/data/parallelized')
-#source(here::here("r/directories.R"))
-#wdir<- glue::glue("{data_directory}/parallelized")
-# wdir <- file.path('/Users/clatka/github/data/parallelized')
-
-
+# Directory paths: input_wdir (read-only Nextcloud inputs) and wdir (local outputs). See paths.R.
+source(here::here("r/land_use_model/paths.R"))
 
 if (USE_SAMPLE_DATA) {
-  data_directory <- file.path(wdir, "1_input/smpl")
+  data_directory <- file.path(input_wdir, "1_input/smpl")
 } else {
-  data_directory <- file.path(wdir, "1_input/full")
+  data_directory <- file.path(input_wdir, "1_input/full")
 }
 
 processing_dir  <- file.path(wdir, "2_processing") 
@@ -121,6 +154,60 @@ cat("  prod_oil loaded:", nrow(prod_oil), "rows\n")
 cat("  suit_harvest_country loaded:", nrow(suit_harvest_country), "rows\n")
 cat("  model loaded\n")
 cat("  final_prices_allcp loaded:", nrow(final_prices_allcp), "rows\n")
+
+
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+# SECTION 2b: Build scenario price vectors -----
+# Expand PRICE_SHOCKS into PRICE_SCENARIOS: a named list (one element per scenario) of named
+# price vectors covering every crop, adjusted from the CPrice == 0 baseline by that scenario's
+# shocks.
+
+baseline_prices <- final_prices_allcp %>% dplyr::filter(CPrice == 0)
+stopifnot(
+  "final_prices_allcp has no CPrice == 0 baseline prices" = nrow(baseline_prices) > 0,
+  "final_prices_allcp has duplicate crops at CPrice == 0" =
+    !anyDuplicated(baseline_prices$crop)
+)
+baseline_price_vec <- stats::setNames(baseline_prices$price_end, baseline_prices$crop)
+
+# Every crop in endo_input_data needs a price, or update_revenues() would silently drop it
+# from the pixel's harvest-share-weighted revenue.
+unpriced_crops <- setdiff(unique(endo_input_data$crop), names(baseline_price_vec))
+if (length(unpriced_crops) > 0) {
+  stop("Crops in endo_input_data with no baseline price: ", paste(unpriced_crops, collapse = ", "))
+}
+
+stopifnot(
+  "The first scenario must be 'bau'" = names(PRICE_SHOCKS)[1] == "bau",
+  "The 'bau' scenario must be unshocked" = length(PRICE_SHOCKS$bau) == 0
+)
+PRICE_SCENARIOS <- lapply(names(PRICE_SHOCKS), function(scn) {
+  shock <- PRICE_SHOCKS[[scn]]
+  unknown_crops <- setdiff(names(shock), names(baseline_price_vec))
+  if (length(unknown_crops) > 0) {
+    stop(sprintf("Scenario '%s' shocks crops not in the model: %s",
+                 scn, paste(unknown_crops, collapse = ", ")))
+  }
+  prices <- baseline_price_vec
+  prices[names(shock)] <- prices[names(shock)] * (1 + shock / 100)
+  prices
+})
+names(PRICE_SCENARIOS) <- names(PRICE_SHOCKS)
+
+# Record the full scenario price table alongside the outputs.
+price_scenarios_df <- dplyr::bind_rows(lapply(names(PRICE_SCENARIOS), function(scn) {
+  tibble::tibble(
+    scenario       = scn,
+    crop           = names(PRICE_SCENARIOS[[scn]]),
+    price_baseline = unname(baseline_price_vec[names(PRICE_SCENARIOS[[scn]])]),
+    price          = unname(PRICE_SCENARIOS[[scn]])
+  )
+})) %>%
+  dplyr::mutate(pct_change = 100 * (price / price_baseline - 1))
+
+readr::write_csv(price_scenarios_df, file.path(output_dir, "price_scenarios.csv"))
+cat("Price scenarios:", paste(names(PRICE_SCENARIOS), collapse = ", "), "\n")
+print(as.data.frame(dplyr::filter(price_scenarios_df, pct_change != 0)), row.names = FALSE)
 
 
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -263,7 +350,7 @@ cat(sprintf("  delta_df (country FEs): %d countries; FE window %d-%d (%d countri
 
 
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-# SECTION 6: Pre-compute revenues for all carbon price scenarios -----
+# SECTION 6: Pre-compute revenues for all crop-price scenarios -----
 #
 # WHY HERE AND NOT IN THE WORKERS?
 # update_revenues() requires endo_input_data, which at full scale is ~2.5 GB.
@@ -271,46 +358,48 @@ cat(sprintf("  delta_df (country FEs): %d countries; FE window %d-%d (%d countri
 # revenues centrally and storing one column per scenario in the chunk files,
 # workers only need the small per-pixel revenue value — not the full crop data.
 #
-# We compute revenue for the baseline (cp=0, from data_past) and for each cp in CP_LIST.
+# Every scenario's revenue, BAU included, comes from update_revenues() applied to that
+# scenario's price vector. Upstream instead took BAU revenue from data_past$revenue; recomputing
+# it from the same formula as the shocked scenarios means BAU-vs-shock differences reflect only
+# the price shock. data_past$revenue is kept below only as a diagnostic.
 
-cat("Pre-computing revenues for all carbon price scenarios...\n")
+cat("Pre-computing revenues for all crop-price scenarios...\n")
 
-# Baseline revenue (cp=0) comes directly from data_past
-n_pixels_with_rev <- n_distinct(data_past$pixel_id)
-cat("  cp=0 (baseline): using revenue column from data_past,", n_pixels_with_rev, "pixels\n")
-
-# Assert that final_prices_allcp contains equilibrium prices for every cp in CP_LIST.
-# If this fails, the input data is missing price scenarios — update K_final_prices_allcp.Rdata.
-missing_cprices <- setdiff(CP_LIST, unique(final_prices_allcp$CPrice))
-if (length(missing_cprices) > 0) {
-  stop(sprintf(
-    "final_prices_allcp is missing endogenous crop prices for %d carbon price level(s): %s\n",
-    length(missing_cprices), paste(missing_cprices, collapse = ", ")
-  ))
-}
-cat("  All", length(CP_LIST), "carbon price levels present in final_prices_allcp\n")
-
-# Revenue under each endogenous carbon price scenario
 revenue_list <- list()
-for (cp in CP_LIST) {
-  crop_prices <- final_prices_allcp %>% filter(CPrice == cp)
+for (scn in names(PRICE_SCENARIOS)) {
+  crop_prices <- tibble::tibble(
+    crop      = names(PRICE_SCENARIOS[[scn]]),
+    price_end = unname(PRICE_SCENARIOS[[scn]])
+  )
 
-  rev_cp <- update_revenues(endo_input_data, crop_prices) %>%
-    rename(!!paste0("revenue_cp", cp) := revenue)
+  rev_scn <- update_revenues(endo_input_data, crop_prices) %>%
+    dplyr::rename(!!paste0("revenue_", scn) := revenue)
 
   # update_revenues covers all pixels in endo_input_data, which may include pixels
   # filtered out of data_past (e.g. fully deforested). The key check is that every
   # pixel remaining in data_past has a revenue value — missing pixels would produce
   # NA revenues and silently corrupt the simulation.
-  missing_pixels <- setdiff(data_past$pixel_id, rev_cp$pixel_id)
+  missing_pixels <- setdiff(data_past$pixel_id, rev_scn$pixel_id)
   if (length(missing_pixels) > 0) {
-    stop(sprintf("Revenue calc for cp=%d is missing %d pixels that are present in data_past",
-                 cp, length(missing_pixels)))
+    stop(sprintf("Revenue calc for scenario '%s' is missing %d pixels that are present in data_past",
+                 scn, length(missing_pixels)))
   }
 
-  revenue_list[[paste0("cp", cp)]] <- rev_cp
-  cat("  cp =", cp, ": revenue computed for", nrow(rev_cp), "pixels\n")
+  revenue_list[[scn]] <- rev_scn
+  cat("  scenario", scn, ": revenue computed for", nrow(rev_scn), "pixels\n")
 }
+
+# Diagnostic: how closely does the recomputed BAU revenue match upstream's data_past$revenue?
+bau_check <- data_past %>%
+  dplyr::select(pixel_id, revenue_data_past = revenue) %>%
+  dplyr::inner_join(revenue_list$bau, by = "pixel_id")
+cat(sprintf(
+  "  BAU revenue vs data_past$revenue: correlation %.6f, median ratio %.4f, max abs diff %.4g\n",
+  stats::cor(bau_check$revenue_bau, bau_check$revenue_data_past),
+  stats::median(bau_check$revenue_bau / bau_check$revenue_data_past, na.rm = TRUE),
+  max(abs(bau_check$revenue_bau - bau_check$revenue_data_past))
+))
+rm(bau_check)
 
 # Join all revenue columns into a single wide table (one row per pixel_id).
 # Then filter to data_past pixels: endo_input_data covers ~2M pixels while data_past
@@ -386,7 +475,7 @@ cat("  ai_pixel_fe computed:", n_distinct(sample_ai$ai_pixel_fe),
 # SECTION 8: Assemble the full simulation input table -----
 # Merge all preprocessed components into one wide table: one row per pixel.
 # Columns: pixel state variables, FEs (fi and ai), country FE, and one revenue
-# column per carbon price scenario. This is the complete input for workers.
+# column per crop-price scenario. This is the complete input for workers.
 
 cat("Assembling simulation input table...\n")
 
@@ -398,12 +487,11 @@ country_fe_lookup <- data_past %>%
 
 sim_input <- data_past %>%
   select(pixel_id, lag_remaining_treecover, remaining_treecover_share,
-         pixel_count, CF, CF_pix, revenue) %>%
-  rename(revenue_cp0 = revenue) %>%
+         pixel_count, CF, CF_pix) %>%
   left_join(gamma_df,         by = "pixel_id") %>%  # adds pixel_fe  (fi scenario)
   left_join(gamma_df_ai,      by = "pixel_id") %>%  # adds ai_pixel_fe (ai scenario)
   left_join(country_fe_lookup, by = "pixel_id") %>%  # adds yc_fe
-  left_join(revenue_wide,     by = "pixel_id")       # adds revenue_cpXX columns
+  left_join(revenue_wide,     by = "pixel_id")       # adds revenue_<scenario> columns
 
 # --- Critical integrity assertions before chunking ---
 stopifnot("sim_input has wrong number of rows"    = nrow(sim_input) == n_pixels)
@@ -415,10 +503,11 @@ stopifnot("NA values in pixel_count"              = !anyNA(sim_input$pixel_count
 stopifnot("NA values in CF"                       = !anyNA(sim_input$CF))
 stopifnot("NA values in CF_pix"                   = !anyNA(sim_input$CF_pix))
 
-# Verify all revenue columns are present
-expected_rev_cols <- c("revenue_cp0", paste0("revenue_cp", CP_LIST))
+# Verify all revenue columns are present and complete
+expected_rev_cols <- paste0("revenue_", names(PRICE_SCENARIOS))
 missing_rev_cols  <- setdiff(expected_rev_cols, names(sim_input))
 stopifnot("Missing revenue columns in sim_input" = length(missing_rev_cols) == 0)
+stopifnot("NA values in revenue columns" = !anyNA(sim_input[expected_rev_cols]))
 
 cat("sim_input assembled:", nrow(sim_input), "rows,", ncol(sim_input), "cols\n")
 cat("  Columns:", paste(names(sim_input), collapse = ", "), "\n")
@@ -426,7 +515,7 @@ cat("  Columns:", paste(names(sim_input), collapse = ", "), "\n")
 # --- Pixel-level static attributes (not time-varying, not scenario-indexed) ---
 pixel_attrs <- data_past %>%
   mutate(biomass_2020 = remaining_treecover_share * CF_pix * pixel_count) %>%
-  select(pixel_id, country, biomass_2020)
+  select(pixel_id, country, lat, lon, biomass_2020)  # lat/lon added for mapping (03_summarise_results.R)
 
 readr::write_csv(pixel_attrs, file.path(output_dir, "grid_smry.csv"))
 cat("pixel_attributes.csv saved:", nrow(pixel_attrs), "pixels\n")
@@ -555,7 +644,8 @@ model_params <- list(
   alpha   = alpha,
   beta    = beta,
   linkinv = model_family$linkinv,
-  cp_list = CP_LIST,
+  cp      = CP,
+  price_scenarios = names(PRICE_SCENARIOS),
   years   = YEARS,
   nyears  = NYEARS,
   iota    = iota,

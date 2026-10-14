@@ -16,6 +16,11 @@
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 # 1. Configuration --------------
 
+# DISABLED in this repo (not adapted): this script still expects upstream's carbon-price outputs and
+# uses upstream's hard-coded paths, which on a colleague's machine point at the shared Nextcloud
+# folder. Remove this stop() only after adapting the script to source paths.R.
+stop("Not adapted for the price-shock pipeline; see report.qmd #sec-lum-changes")
+
 USE_SAMPLE_DATA <- FALSE
 
 # Load packages and functions

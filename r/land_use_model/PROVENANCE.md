@@ -21,7 +21,12 @@ Not copied: `logs/` (old upstream pipeline run logs).
    `here::here("r/robert_test/parallelization/...")` calls in all 17 scripts rewritten to
    `here::here("r/land_use_model/...")`. No other changes on import.
 
-_Record further modifications below as the price-shock scenarios are wired in._
+2. **Price-shock scenarios** (`01_prepare_data.R`, `02_run_simulations.R`): carbon price fixed at
+   0, carbon-price scenarios replaced by crop-price scenarios, input/output paths moved to a new `paths.R` that refuses to write inside Nextcloud, every unadapted script disabled with a `stop()`, and a new `03_summarise_results.R` that
+   aggregates results by country and grid square.
+
+The full, numbered list of every change since import is kept in one place: "Appendix A: Changes to
+the land-use model code" in `report.qmd` (`#sec-lum-changes`). Record new changes there.
 
 ## Checking upstream for changes
 

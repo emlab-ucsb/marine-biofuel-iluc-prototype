@@ -29,14 +29,17 @@
 
 # Ordered list of pipeline stages (data -> results -> figures). Comment out any you want to skip
 # (e.g. if the chunks are already built and you only need to re-aggregate, run with args "03" "06").
+# Upstream stages 03-07 are disabled in this repo until adapted to the price-shock outputs (each
+# also has a stop() at its top). 03_summarise_results.R is this repo's own aggregation step.
 STAGES <- c(
   "01_prepare_data.R",         # build chunk inputs (fixed effects, revenues) from raw data
   "02_run_simulations.R",      # simulate all scenarios over every chunk           (LONG)
-  "03_aggregate_results.R",    # aggregate per-pixel PV metrics -> sim_results.csv  (parallel)
-  "04_analyze_results.R",      # downstream analysis of aggregated results
-  "05_validate_results.R",     # logic / consistency checks
-  "06_figures_tables.R",       # Table 2 + paper figures
-  "07_leakage_decomposition.R" # leakage decomposition (SI)
+  "03_summarise_results.R"     # country and gridded totals -> data/derived/
+  # "03_aggregate_results.R",    # aggregate per-pixel PV metrics -> sim_results.csv  (parallel)
+  # "04_analyze_results.R",      # downstream analysis of aggregated results
+  # "05_validate_results.R",     # logic / consistency checks
+  # "06_figures_tables.R",       # Table 2 + paper figures
+  # "07_leakage_decomposition.R" # leakage decomposition (SI)
 )
 
 pipeline_dir <- here::here("r/land_use_model")
