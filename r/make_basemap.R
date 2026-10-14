@@ -37,7 +37,8 @@ model_country_crosswalk <- c(
   "Jordan"      = "Yemen_Oman_Jordan_Iraq_Iran",
   "Iraq"        = "Yemen_Oman_Jordan_Iraq_Iran",
   "Iran"        = "Yemen_Oman_Jordan_Iraq_Iran",
-  "North Macedonia" = "Macedonia"
+  "North Macedonia" = "Macedonia",
+  "Somaliland"  = "Somalia" # the model assigns Somaliland's cells to Somalia
 )
 stopifnot("Crosswalk names a country not in Natural Earth" =
             all(names(model_country_crosswalk) %in% ne$admin))

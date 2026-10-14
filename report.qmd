@@ -564,7 +564,7 @@ The effect arrives early but keeps growing: `r fmt0(100 * gl("vo_central", 2035,
 #| label: forest-loss-grid-map
 #| column: body-outset
 #| fig-width: 10
-#| fig-height: 4.4
+#| fig-height: 5.2
 #| fig-cap: "Cumulative additional forest carbon loss under the central scenario over the full horizon, per 0.5° grid square. Gray squares have modeled forest but less than 1 kt CO₂ of additional loss."
 
 grid <- utils::read.csv(file.path("data", "derived", "land_use_grid_loss.csv.gz"))
@@ -587,7 +587,7 @@ ggplot2::ggplot() +
     drop = FALSE,
     guide = ggplot2::guide_legend(nrow = 1, title.position = "top", label.position = "bottom", keywidth = ggplot2::unit(1.6, "cm"), keyheight = ggplot2::unit(0.3, "cm"))
   ) +
-  ggplot2::coord_quickmap(xlim = c(-170, 180), ylim = c(-45, 62), expand = FALSE) +
+  ggplot2::coord_quickmap(xlim = c(-180, 180), ylim = c(-57, 84), expand = FALSE) +
   theme_map()
 ```
 
@@ -595,8 +595,8 @@ ggplot2::ggplot() +
 #| label: forest-loss-country-map
 #| column: body-outset
 #| fig-width: 10
-#| fig-height: 4.4
-#| fig-cap: "Cumulative additional forest carbon loss under the central scenario over the full horizon, by country. Where the model pools neighboring countries into one region, each member shows the region's total; all such regions lose less than 1 Mt CO₂."
+#| fig-height: 5.2
+#| fig-cap: "Cumulative additional forest carbon loss under the central scenario over the full horizon, by country. Gray countries have no additional loss (no oil palm or soybean area in the model) or are not in the model. Where the model pools neighboring countries into one region, each member shows the region's total; all such regions lose less than 1 Mt CO₂."
 
 country_classes <- c("< 1", "1–10", "10–50", "50–100", "100–500", "≥ 500")
 country_map <- central_final |>
@@ -610,17 +610,22 @@ country_map <- central_final |>
   )
 basemap_country <- dplyr::left_join(basemap, country_map, by = "model_country")
 
-ggplot2::ggplot(basemap_country, ggplot2::aes(lon, lat, group = piece, subgroup = ring, fill = class)) +
-  ggplot2::geom_polygon(colour = col_surface, linewidth = 0.2) +
+# All countries as a gray base layer, then countries with additional loss on top. (A discrete
+# scale with na.translate = FALSE would leave countries without loss unfilled, not gray.)
+ggplot2::ggplot(mapping = ggplot2::aes(lon, lat, group = piece, subgroup = ring)) +
+  ggplot2::geom_polygon(data = basemap, fill = col_land, colour = col_surface, linewidth = 0.2) +
+  ggplot2::geom_polygon(
+    data = dplyr::filter(basemap_country, !is.na(class)),
+    ggplot2::aes(fill = class),
+    colour = col_surface, linewidth = 0.2
+  ) +
   ggplot2::scale_fill_manual(
     values = stats::setNames(blue_ramp[2:7], country_classes),
-    na.value = col_land,
-    na.translate = FALSE,
     name = expression("Additional loss (Mt CO"[2] * ")"),
     drop = FALSE,
     guide = ggplot2::guide_legend(nrow = 1, title.position = "top", label.position = "bottom", keywidth = ggplot2::unit(1.6, "cm"), keyheight = ggplot2::unit(0.3, "cm"))
   ) +
-  ggplot2::coord_quickmap(xlim = c(-170, 180), ylim = c(-45, 62), expand = FALSE) +
+  ggplot2::coord_quickmap(xlim = c(-180, 180), ylim = c(-57, 84), expand = FALSE) +
   theme_map()
 ```
 
