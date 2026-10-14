@@ -168,6 +168,75 @@ In April 2025 the International Maritime Organization approved draft amendments 
 
 Fuels are judged only on their direct life-cycle emissions, with nothing for land-use change. Blending in biofuel costs less than the \$380 Tier 2 penalty, so the cheapest strategy is to blend just enough to meet the Base target. In ICCT's least-cost fuel mix, used-cooking-oil renewable diesel (UCO-RD) runs out at about 5% of shipping energy, and virgin vegetable-oil renewable diesel (VO-RD) covers the rest, reaching 46% of shipping energy by 2035 [@seber2025, p. 4 and Table 1, p. 5].
 
+ICCT's Table 1 gives that mix for each year from 2028 to 2035. We read it straight from the PDF; the last column, virgin vegetable-oil feedstock, is the demand shift used in this analysis.
+
+```{r}
+#| label: scrape-icct-table-1
+
+pdf_path <- file.path(
+  "data",
+  "icct_biofuel_demand_report",
+  "ID-450-Vegetable-Oil_research-brief_final.pdf"
+)
+
+# Extract page 5 as text and keep only the data rows (years 2028–2035)
+page5 <- pdftools::pdf_text(pdf_path)[5]
+lines <- stringr::str_trim(stringr::str_split(page5, "\n")[[1]])
+data_lines <- stringr::str_subset(lines, "^20(2[89]|3[0-5])\\b")
+
+# Each data row yields exactly 10 numeric tokens:
+#   year, shipping demand, base target, fossil LNG %,
+#   UCO-RD %, UCO-RD bl, VO-RD %, VO-RD bl, UCO demand bl, VO demand bl
+nums <- stringr::str_extract_all(data_lines, "[0-9]+\\.?[0-9]*")
+mat <- do.call(rbind, lapply(nums, function(x) as.numeric(x[seq_len(10)])))
+
+icct_table_1 <- tibble::as_tibble(mat, .name_repair = "minimal")
+names(icct_table_1) <- c(
+  "year",
+  "shipping_energy_demand_ej",
+  "base_target_trajectory_gco2e_mj",
+  "fossil_lng_pct",
+  "ucord_pct_energy_demand",
+  "ucord_billion_liters",
+  "vord_pct_energy_demand",
+  "vord_billion_liters",
+  "uco_demand_billion_liters",
+  "vo_demand_billion_liters"
+)
+
+icct_table_1 <- icct_table_1 |>
+  dplyr::mutate(year = as.integer(year)) |>
+  dplyr::arrange(year)
+
+# Saved for the setup chunk, which needs the 2035 VO-RD energy for the ILUC calculation.
+utils::write.csv(icct_table_1, file.path("data", "derived", "icct_table_1.csv"), row.names = FALSE)
+
+knitr::kable(
+  icct_table_1 |>
+    dplyr::select(
+      year,
+      shipping_energy_demand_ej,
+      base_target_trajectory_gco2e_mj,
+      ucord_pct_energy_demand,
+      vord_pct_energy_demand,
+      vord_billion_liters,
+      vo_demand_billion_liters
+    ),
+  col.names = c(
+    "Year",
+    "Shipping energy (EJ)",
+    "Base target (g CO₂e/MJ)",
+    "UCO-RD (% of energy)",
+    "VO-RD (% of energy)",
+    "VO-RD fuel (billion L)",
+    "Virgin VO feedstock (billion L)"
+  ),
+  caption = "ICCT Table 1, selected columns [@seber2025, Table 1, p. 5]. Virgin vegetable-oil feedstock, the last column, is the demand shock D."
+)
+```
+
+The direct carbon intensities behind the mix:
+
 | Fuel | Life-cycle carbon intensity (g CO₂e/MJ) |
 |---|---|
 | 2008 baseline | 93.3 |
@@ -237,6 +306,41 @@ where $D$ is marine virgin vegetable-oil demand, $Q_0$ is baseline world product
 
 : Inputs to the price shock. The central multiplier is $M \approx 2.5$; the sensitivity, $M \approx 6.7$.
 
+$Q_0$ is world production of the four oils in 2024/25, summed across countries from the USDA Foreign Agricultural Service's PSD oilseeds data (`data/usda_psd_oilseeds/psd_oilseeds_csv.zip`, downloaded 2026-07-31) [@usdapsd]. USDA revises PSD continuously, so a later download may give slightly different numbers.
+
+```{r}
+#| label: psd-q0
+
+psd_zip_path <- file.path("data", "usda_psd_oilseeds", "psd_oilseeds_csv.zip")
+psd <- utils::read.csv(unz(psd_zip_path, "psd_oilseeds.csv"))
+
+q0_market_year <- 2024 # marketing year 2024/25
+
+psd_four_oils <- psd |>
+  dplyr::filter(
+    Commodity_Description %in%
+      c("Oil, Palm", "Oil, Soybean", "Oil, Rapeseed", "Oil, Sunflowerseed"),
+    Attribute_Description == "Production",
+    Market_Year == q0_market_year
+  ) |>
+  dplyr::summarise(
+    production_mt = sum(Value) / 1000, # reported in 1000 MT
+    .by = Commodity_Description
+  ) |>
+  dplyr::arrange(dplyr::desc(production_mt))
+
+knitr::kable(
+  psd_four_oils,
+  digits = 1,
+  col.names = c("Commodity", "World production, 2024/25 (million t)"),
+  caption = paste0(
+    "World production of the four major vegetable oils (USDA PSD). Total: ",
+    round(sum(psd_four_oils$production_mt), 1),
+    " million t."
+  )
+)
+```
+
 Some notes on these choices:
 
 - Vegetable oils substitute for one another, so we treat them as one market even though the marine demand is for soy oil [@chen2026, p. 4]. $Q_0$ covers the same four oils as the Chen elasticities.
@@ -276,6 +380,8 @@ All runs use a zero carbon price. BAU uses 2020 prices. The central run raises p
 
 Forest carbon (t CO₂) is tree cover times carbon density, and forest area (ha) is forest carbon divided by carbon density, using the model's own conversion. We count forest carbon lost as emissions, which leaves out peat, soil carbon and lost future sequestration. As a sanity check, the model has `r fmt0(sum(bau$area_bau[bau$year == 2020]) / 1e6)` Mha of forest in 2020, `r fmt0(100 * sum(bau$area_bau[bau$year == 2020]) / 4.06e9)`% of FAO's 4.06 billion ha [@fao2020fra, p. 1]; the two use different definitions of forest.
 
+The model inputs are emLab's `land-based-solutions` data on Nextcloud (`data/parallelized/1_input/full`), which we read but never modify. The simulation outputs (about 7 GB) are not in the repository; `r/land_use_model/03_summarise_results.R` reduces them to country × scenario × year totals (`data/derived/land_use_country_results.csv.gz`) and 0.5° grid-square totals (`data/derived/land_use_grid_loss.csv.gz`), which this report reads. Map outlines are Natural Earth's 1:110m countries [@naturalearth], stored as plain coordinates by `r/make_basemap.R`.
+
 ### ILUC carbon intensity {#sec-iluc-method}
 
 We spread the additional emissions over an accounting period of $T$ years of fuel use:
@@ -287,118 +393,6 @@ where $\Delta C(T)$ is the cumulative additional forest carbon loss $T$ years af
 There is no single convention for $T$. The EU uses 20 years [@valin2015, p. 3] and the US EPA 30 [@chen2026, p. 13]. We report 20, 25 and 30 years and use 25 as the headline. That is the period Chen et al. use, matching the typical oil palm replanting cycle [@chen2026, p. 13], so our number compares directly with their 84.1 g CO₂e/MJ. ICCT's 62 g CO₂e/MJ comes from the EPA's model comparison, which divides cumulative emissions over 2020–2050 by cumulative fuel use over the same years [@epa2023mce, pp. 83–84], so it is closest to our 30-year value.
 
 The result counts only CO₂ from forest biomass. We split it by country using each country's share of the additional loss, and by crop using the palm-only and soy-only runs.
-
-## Data
-
-### ICCT demand projection
-
-ICCT's Table 1 (p. 5) gives the least-cost fuel mix for 2028–2035 [@seber2025]. We read it straight from the PDF.
-
-```{r}
-#| label: scrape-icct-table-1
-
-pdf_path <- file.path(
-  "data",
-  "icct_biofuel_demand_report",
-  "ID-450-Vegetable-Oil_research-brief_final.pdf"
-)
-
-# Extract page 5 as text and keep only the data rows (years 2028–2035)
-page5 <- pdftools::pdf_text(pdf_path)[5]
-lines <- stringr::str_trim(stringr::str_split(page5, "\n")[[1]])
-data_lines <- stringr::str_subset(lines, "^20(2[89]|3[0-5])\\b")
-
-# Each data row yields exactly 10 numeric tokens:
-#   year, shipping demand, base target, fossil LNG %,
-#   UCO-RD %, UCO-RD bl, VO-RD %, VO-RD bl, UCO demand bl, VO demand bl
-nums <- stringr::str_extract_all(data_lines, "[0-9]+\\.?[0-9]*")
-mat <- do.call(rbind, lapply(nums, function(x) as.numeric(x[seq_len(10)])))
-
-icct_table_1 <- tibble::as_tibble(mat, .name_repair = "minimal")
-names(icct_table_1) <- c(
-  "year",
-  "shipping_energy_demand_ej",
-  "base_target_trajectory_gco2e_mj",
-  "fossil_lng_pct",
-  "ucord_pct_energy_demand",
-  "ucord_billion_liters",
-  "vord_pct_energy_demand",
-  "vord_billion_liters",
-  "uco_demand_billion_liters",
-  "vo_demand_billion_liters"
-)
-
-icct_table_1 <- icct_table_1 |>
-  dplyr::mutate(year = as.integer(year)) |>
-  dplyr::arrange(year)
-
-# Saved for the setup chunk, which needs the 2035 VO-RD energy for the ILUC calculation.
-utils::write.csv(icct_table_1, file.path("data", "derived", "icct_table_1.csv"), row.names = FALSE)
-
-knitr::kable(
-  icct_table_1 |>
-    dplyr::select(
-      year,
-      shipping_energy_demand_ej,
-      base_target_trajectory_gco2e_mj,
-      ucord_pct_energy_demand,
-      vord_pct_energy_demand,
-      vord_billion_liters,
-      vo_demand_billion_liters
-    ),
-  col.names = c(
-    "Year",
-    "Shipping energy (EJ)",
-    "Base target (g CO₂e/MJ)",
-    "UCO-RD (% of energy)",
-    "VO-RD (% of energy)",
-    "VO-RD fuel (billion L)",
-    "Virgin VO feedstock (billion L)"
-  ),
-  caption = "ICCT Table 1, selected columns [@seber2025, Table 1, p. 5]. Virgin vegetable-oil feedstock, the last column, is the demand shock D."
-)
-```
-
-### Baseline vegetable-oil production
-
-$Q_0$ is world production of the four oils in 2024/25, summed across countries from the USDA Foreign Agricultural Service's PSD oilseeds data (`data/usda_psd_oilseeds/psd_oilseeds_csv.zip`, downloaded 2026-07-31) [@usdapsd]. USDA revises PSD continuously, so a later download may give slightly different numbers.
-
-```{r}
-#| label: psd-q0
-
-psd_zip_path <- file.path("data", "usda_psd_oilseeds", "psd_oilseeds_csv.zip")
-psd <- utils::read.csv(unz(psd_zip_path, "psd_oilseeds.csv"))
-
-q0_market_year <- 2024 # marketing year 2024/25
-
-psd_four_oils <- psd |>
-  dplyr::filter(
-    Commodity_Description %in%
-      c("Oil, Palm", "Oil, Soybean", "Oil, Rapeseed", "Oil, Sunflowerseed"),
-    Attribute_Description == "Production",
-    Market_Year == q0_market_year
-  ) |>
-  dplyr::summarise(
-    production_mt = sum(Value) / 1000, # reported in 1000 MT
-    .by = Commodity_Description
-  ) |>
-  dplyr::arrange(dplyr::desc(production_mt))
-
-knitr::kable(
-  psd_four_oils,
-  digits = 1,
-  col.names = c("Commodity", "World production, 2024/25 (million t)"),
-  caption = paste0(
-    "World production of the four major vegetable oils (USDA PSD). Total: ",
-    round(sum(psd_four_oils$production_mt), 1),
-    " million t."
-  )
-)
-```
-
-### Land-use model inputs and outputs
-
-The model inputs are emLab's `land-based-solutions` data on Nextcloud (`data/parallelized/1_input/full`), which we read but never modify. The simulation outputs (about 7 GB) are not in the repository; `r/land_use_model/03_summarise_results.R` reduces them to country × scenario × year totals (`data/derived/land_use_country_results.csv.gz`) and 0.5° grid-square totals (`data/derived/land_use_grid_loss.csv.gz`), which this report reads. Map outlines are Natural Earth's 1:110m countries [@naturalearth], stored as plain coordinates by `r/make_basemap.R`.
 
 ## Results
 
