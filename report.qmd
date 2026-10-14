@@ -108,12 +108,13 @@ fmt1 <- function(x) formatC(x, format = "f", digits = 1, big.mark = ",")
 fmt0 <- function(x) formatC(x, format = "f", digits = 0, big.mark = ",")
 
 # Figures: one ggplot2 theme and one set of colors throughout. Scenarios and crops keep the same
-# colors in every figure; magnitude on maps uses viridis, reversed so darker means more loss.
+# colors in every figure; magnitude on maps uses viridisLite's magma, reversed so darker means
+# more loss (the ends are trimmed so the lightest step stays visible on the gray land).
 col_surface <- "#fcfcfb"
 col_land <- "#ecebe6"
 col_scenario <- c(Central = "#2a78d6", Sensitivity = "#eb6834")
 col_crop <- c("Oil palm" = "#1baf7a", "Soybeans" = "#eda100")
-map_ramp <- function(n) viridisLite::viridis(n, direction = -1)
+map_ramp <- function(n) viridisLite::magma(n, direction = -1, begin = 0.1, end = 0.95)
 
 theme_report <- function() {
   ggplot2::theme_minimal(base_size = 11) +
