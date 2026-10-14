@@ -1,6 +1,10 @@
 project:
   type: website
   output-dir: _site
+  # Only the report is a page. Without this, Quarto also publishes every .md file in the repo
+  # (e.g. r/land_use_model/PROVENANCE.md) and points the site root at the first one.
+  render:
+    - report.qmd
 
 website:
   title: "Marine Biofuel ILUC Prototype"
