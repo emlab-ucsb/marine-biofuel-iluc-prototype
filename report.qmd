@@ -84,12 +84,12 @@ fmt1 <- function(x) formatC(x, format = "f", digits = 1, big.mark = ",")
 fmt0 <- function(x) formatC(x, format = "f", digits = 0, big.mark = ",")
 
 # Figures: one ggplot2 theme and one set of colors throughout. Scenarios and crops keep the same
-# colors in every figure; magnitude on maps uses a single-hue blue ramp.
+# colors in every figure; magnitude on maps uses viridis, reversed so darker means more loss.
 col_surface <- "#fcfcfb"
 col_land <- "#ecebe6"
 col_scenario <- c(Central = "#2a78d6", Sensitivity = "#eb6834")
 col_crop <- c("Oil palm" = "#1baf7a", "Soybeans" = "#eda100")
-blue_ramp <- c("#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#256abf", "#184f95", "#0d366b")
+map_ramp <- function(n) viridisLite::viridis(n, direction = -1)
 
 theme_report <- function() {
   ggplot2::theme_minimal(base_size = 11) +
@@ -582,7 +582,7 @@ ggplot2::ggplot() +
   ) +
   ggplot2::geom_tile(data = grid, ggplot2::aes(lon, lat, fill = class), width = 0.5, height = 0.5) +
   ggplot2::scale_fill_manual(
-    values = stats::setNames(c("#d6d4cc", blue_ramp[2:7]), grid_classes),
+    values = stats::setNames(c("#d6d4cc", map_ramp(6)), grid_classes),
     name = expression("Additional loss (kt CO"[2] * " per square)"),
     drop = FALSE,
     guide = ggplot2::guide_legend(nrow = 1, title.position = "top", label.position = "bottom", keywidth = ggplot2::unit(1.6, "cm"), keyheight = ggplot2::unit(0.3, "cm"))
@@ -620,7 +620,7 @@ ggplot2::ggplot(mapping = ggplot2::aes(lon, lat, group = piece, subgroup = ring)
     colour = col_surface, linewidth = 0.2
   ) +
   ggplot2::scale_fill_manual(
-    values = stats::setNames(blue_ramp[2:7], country_classes),
+    values = stats::setNames(map_ramp(6), country_classes),
     name = expression("Additional loss (Mt CO"[2] * ")"),
     drop = FALSE,
     guide = ggplot2::guide_legend(nrow = 1, title.position = "top", label.position = "bottom", keywidth = ggplot2::unit(1.6, "cm"), keyheight = ggplot2::unit(0.3, "cm"))
@@ -794,6 +794,74 @@ Every change made to the emLab land-use model to run the price-shock scenarios, 
 - `vo_central_palm` and `vo_central_soy` sum to `vo_central` to within 0.04% of its additional loss, 15 years after the shock and at the end of the horizon.
 - `03_summarise_results.R`: BAU 2020 forest carbon summed by country equals `01`'s per-pixel 2020 biomass, and each scenario's gridded loss equals its country-level loss.
 - Runtime on a 64 GB laptop, six scenarios: `01` 241 s (peak memory ~27 GB), `02` 145 s, `03_summarise_results.R` 43 s.
+
+## Appendix B: Results of the +20% test run {#sec-test-run}
+
+The first run the model's authors asked for: oil palm and soybean prices both raised 20% (soybeans at the full 20%, with no oil-share pass-through), carbon price 0, everything else as in [Methods](#sec-land-use-model). It is a check on the model's response, not a policy scenario.
+
+```{r}
+#| label: test-run-global
+
+test_global <- lum |>
+  dplyr::filter(scenario %in% c("bau", "vo_20pct")) |>
+  dplyr::summarise(
+    carbon = sum(forest_carbon_tco2),
+    area = sum(forest_area_ha),
+    .by = c(scenario, year)
+  ) |>
+  dplyr::arrange(scenario, year)
+test_bau <- test_global[test_global$scenario == "bau", ]
+test_shock <- test_global[test_global$scenario == "vo_20pct", ]
+stopifnot(identical(test_bau$year, test_shock$year))
+
+base_year <- min(lum$year)
+test_rows <- match(c(base_year + 1, 2035, 2050, final_year), test_bau$year)
+bau_loss <- test_bau$carbon[test_bau$year == base_year] - test_bau$carbon[test_rows]
+extra_loss <- test_bau$carbon[test_rows] - test_shock$carbon[test_rows]
+
+knitr::kable(
+  data.frame(
+    "Years after shock" = test_bau$year[test_rows] - base_year,
+    "BAU forest carbon loss (Gt CO₂)" = bau_loss / 1e9,
+    "Additional loss, +20% (Gt CO₂)" = extra_loss / 1e9,
+    "Additional loss, +20% (Mha)" = (test_bau$area[test_rows] - test_shock$area[test_rows]) / 1e6,
+    "Additional as % of BAU loss" = 100 * extra_loss / bau_loss,
+    check.names = FALSE
+  ),
+  digits = c(0, 1, 3, 2, 2),
+  caption = "+20% test run: cumulative forest carbon loss under BAU and additional loss from the price increase, all countries."
+)
+```
+
+- **Baseline.** BAU loses `r fmt1(bau_loss[1] / 1e9)` Gt CO₂ of forest carbon in the first year, in line with the ~4.2 Gt first-year prediction noted in upstream's `01_prepare_data.R`.
+- **Response.** The +20% price increase adds `r fmt1(100 * extra_loss[2] / bau_loss[2])`% to BAU's cumulative loss over 15 years. The share falls over longer horizons because BAU loss keeps accumulating while the shocked run's extra loss levels off.
+
+```{r}
+#| label: test-run-countries
+
+test_countries <- lum |>
+  dplyr::filter(scenario %in% c("bau", "vo_20pct"), year %in% c(2035, final_year)) |>
+  dplyr::select(country, scenario, year, forest_carbon_tco2) |>
+  dplyr::summarise(
+    extra_mt = (forest_carbon_tco2[scenario == "bau"] - forest_carbon_tco2[scenario == "vo_20pct"]) / 1e6,
+    .by = c(country, year)
+  )
+test_top <- dplyr::inner_join(
+  test_countries |> dplyr::filter(year == 2035) |> dplyr::select(country, extra_15 = extra_mt),
+  test_countries |> dplyr::filter(year == final_year) |> dplyr::select(country, extra_full = extra_mt),
+  by = "country"
+) |>
+  dplyr::mutate(share_pct = 100 * extra_full / sum(extra_full)) |>
+  dplyr::arrange(dplyr::desc(extra_full)) |>
+  utils::head(10)
+
+knitr::kable(
+  test_top,
+  digits = 1,
+  col.names = c("Country", "Additional loss, 15 years (Mt CO₂)", "Additional loss, full horizon (Mt CO₂)", "Share of global (%)"),
+  caption = "+20% test run: the ten countries with the largest additional forest carbon loss."
+)
+```
 
 ## References
 
