@@ -72,6 +72,29 @@ gap_peaks <- loss |>
 n_narrowing <- sum(gap_peaks$peak > 1e6 & gap_peaks$final < 0.95 * gap_peaks$peak)
 mys <- gap_peaks[gap_peaks$country == "Malaysia", ]
 
+# ILUC carbon intensity: additional forest carbon loss after T years of fuel use, divided by T
+# years of VO-RD energy at the 2035 level. Annual VO-RD energy is ICCT's 2035 VO-RD share of
+# shipping energy (Table 1), saved by the scrape-icct-table-1 chunk below.
+icct_saved <- utils::read.csv(file.path("data", "derived", "icct_table_1.csv"))
+icct_2035 <- icct_saved[icct_saved$year == 2035, ]
+vord_mj_2035 <- icct_2035$vord_pct_energy_demand / 100 * icct_2035$shipping_energy_demand_ej * 1e12
+vord_direct_ci <- 42.3 # g CO2e/MJ, soy VO-RD (Seber & Pavlenko 2025, p. 6)
+fossil_baseline_ci <- 93.3 # g CO2e/MJ, 2008 baseline (Seber & Pavlenko 2025, p. 1)
+accounting_years <- c(20, 25, 30)
+headline_years <- 25
+iluc <- expand.grid(
+  scenario = c("vo_central", "vo_high"),
+  years = accounting_years,
+  stringsAsFactors = FALSE
+)
+iluc$carbon_loss <- mapply(
+  function(scn, yrs) gl(scn, min(lum$year) + yrs, "carbon_loss"),
+  iluc$scenario, iluc$years
+)
+iluc$g_per_mj <- iluc$carbon_loss * 1e6 / (iluc$years * vord_mj_2035)
+iluc <- iluc[order(iluc$scenario, iluc$years), ]
+il <- function(scn, yrs) iluc$g_per_mj[iluc$scenario == scn & iluc$years == yrs]
+
 # Crop attribution: palm-only and soy-only runs of the central shock. They sum to the joint run
 # to within the interaction term reported here.
 crop_split <- c(
@@ -133,7 +156,9 @@ The land-use model prices palm as palm oil but soybeans as whole beans. About 35
 
 With those prices, emLab's land-use model clears an extra `r fmt1(gl("vo_central", 2035, "area_loss") / 1e6)` Mha of forest in the first 15 years compared with business as usual, releasing `r fmt1(gl("vo_central", 2035, "carbon_loss") / 1e9)` Gt CO₂. Over the model's full `r n_years`-year run the totals are `r fmt1(gl("vo_central", final_year, "area_loss") / 1e6)` Mha and `r fmt1(gl("vo_central", final_year, "carbon_loss") / 1e9)` Gt CO₂, or `r fmt1(gl("vo_high", final_year, "carbon_loss") / 1e9)` Gt CO₂ with the Roberts & Schlenker shock. The palm price increase causes `r fmt0(100 * crop_split[["palm"]] / sum(crop_split))`% of the additional loss and the soybean increase `r fmt0(100 * crop_split[["soy"]] / sum(crop_split))`%. Most of it falls in a few countries: `r central_final$country[1]` and `r central_final$country[2]` account for `r fmt0(100 * sum(central_final$share[1:2]))`%, and the top 12 countries for `r fmt0(100 * sum(central_final$share[1:12]))`%.
 
-The next step is to turn this into an ILUC carbon intensity in g CO₂e/MJ, which can be compared with the 62 g CO₂e/MJ ICCT has used [@sturrup2026, p. 10] and the 84.1 g CO₂e/MJ that @chen2026 [Table 1, p. 13] estimate for palm.
+Spread over `r headline_years` years of fuel use, the additional forest carbon loss comes to `r fmt1(il("vo_central", 25))` g CO₂ per MJ of VO-RD (`r fmt1(il("vo_central", 20))` over 20 years, `r fmt1(il("vo_central", 30))` over 30), or `r fmt1(il("vo_high", 25))` with the Roberts & Schlenker shock. Added to VO-RD's direct `r vord_direct_ci` g CO₂e/MJ [@seber2025, p. 6], the central value gives `r fmt1(vord_direct_ci + il("vo_central", 25))` g/MJ, `r ifelse(vord_direct_ci + il("vo_central", 25) < fossil_baseline_ci, "below", "above")` the `r fossil_baseline_ci` fossil baseline; the sensitivity value gives `r fmt1(vord_direct_ci + il("vo_high", 25))`, `r ifelse(vord_direct_ci + il("vo_high", 25) < fossil_baseline_ci, "below", "above")` it.
+
+Our central estimate is well below the 62 g CO₂e/MJ ICCT has used [@sturrup2026, p. 10] and the 84.1 g CO₂e/MJ that @chen2026 [Table 1, p. 13] estimate for palm. One reason is that we count only carbon in forest biomass: peat alone was 614 of the 1,086 Tg CO₂e in Chen et al.'s estimate [@chen2026, Table 1, p. 13].
 
 ## Background
 
@@ -164,7 +189,7 @@ flowchart LR
   F --> B["Virgin vegetable-oil demand<br/><i>1.22 kg oil per kg RD</i>"]
   B --> C["Vegetable-oil price shock<br/><i>this report</i>"]
   C --> D["Forest loss by country<br/><i>emLab land-use model</i>"]
-  D --> E["ILUC carbon intensity<br/><i>next step</i>"]
+  D --> E["ILUC carbon intensity<br/><i>this report</i>"]
 ```
 
 ICCT converts renewable diesel to oil at 1.22 kg of oil per kg of fuel [@seber2025, p. 3, note 9].
@@ -189,7 +214,7 @@ The analysis has four steps:
 1. Convert ICCT's 2035 vegetable-oil demand into a price shock.
 2. Translate that shock into prices for the crops in emLab's land-use model.
 3. Run the model with baseline and shocked prices, both at a zero carbon price, and take the difference in forest loss.
-4. Express the additional emissions per MJ of fuel. This step is not done yet.
+4. Spread the additional emissions over the fuel used, to get g CO₂ per MJ.
 
 ### From demand to a price shock {#sec-price-shock}
 
@@ -251,9 +276,17 @@ All runs use a zero carbon price. BAU uses 2020 prices. The central run raises p
 
 Forest carbon (t CO₂) is tree cover times carbon density, and forest area (ha) is forest carbon divided by carbon density, using the model's own conversion. We count forest carbon lost as emissions, which leaves out peat, soil carbon and lost future sequestration. As a sanity check, the model has `r fmt0(sum(bau$area_bau[bau$year == 2020]) / 1e6)` Mha of forest in 2020, `r fmt0(100 * sum(bau$area_bau[bau$year == 2020]) / 4.06e9)`% of FAO's 4.06 billion ha [@fao2020fra, p. 1]; the two use different definitions of forest.
 
-### ILUC carbon intensity (not done yet)
+### ILUC carbon intensity {#sec-iluc-method}
 
-The last step will divide the additional emissions by the energy in the fuel, giving g CO₂e/MJ that can be added to VO-RD's direct 42.3 g CO₂e/MJ [@seber2025, p. 6]. Because the model works at the cell level, the result will break down by country.
+We spread the additional emissions over an accounting period of $T$ years of fuel use:
+
+$$ \text{ILUC}_T = \frac{\Delta C(T)}{T \times E} $$
+
+where $\Delta C(T)$ is the cumulative additional forest carbon loss $T$ years after the shock and $E$ is the energy in one year of VO-RD use at the 2035 level. $E$ is ICCT's 46.0% VO-RD share of 10.0 EJ of shipping energy, or 4.60 EJ [@seber2025, Table 1, p. 5]. Working forward from the feedstock instead (139.3 billion L of oil at 0.92 kg/L, 1.22 kg of oil per kg of fuel, and 43,980 MJ per tonne of fuel) gives 4.62 EJ [@seber2025, pp. 3 and 6, Table A1]. Because the model applies the 2035 demand level from its first year, $T$ years means $T$ years of fuel use at that level, not a span of calendar years.
+
+There is no single convention for $T$. The EU uses 20 years [@valin2015, p. 3] and the US EPA 30 [@chen2026, p. 13]. We report 20, 25 and 30 years and use 25 as the headline. That is the period Chen et al. use, matching the typical oil palm replanting cycle [@chen2026, p. 13], so our number compares directly with their 84.1 g CO₂e/MJ. ICCT's 62 g CO₂e/MJ comes from the EPA's model comparison, which divides cumulative emissions over 2020–2050 by cumulative fuel use over the same years [@epa2023mce, pp. 83–84], so it is closest to our 30-year value.
+
+The result counts only CO₂ from forest biomass. We split it by country using each country's share of the additional loss, and by crop using the palm-only and soy-only runs.
 
 ## Data
 
@@ -298,6 +331,9 @@ names(icct_table_1) <- c(
 icct_table_1 <- icct_table_1 |>
   dplyr::mutate(year = as.integer(year)) |>
   dplyr::arrange(year)
+
+# Saved for the setup chunk, which needs the 2035 VO-RD energy for the ILUC calculation.
+utils::write.csv(icct_table_1, file.path("data", "derived", "icct_table_1.csv"), row.names = FALSE)
 
 knitr::kable(
   icct_table_1 |>
@@ -731,13 +767,97 @@ DT::datatable(
 
 `r sum(central_final$carbon_loss > 0)` countries lose some additional forest, but `r central_final$country[1]`, `r central_final$country[2]` and `r central_final$country[3]` account for `r fmt0(100 * sum(central_final$share[1:3]))`% of the total. Only cells that grow oil palm or soybeans respond, because those are the only prices that change.
 
-Because cleared forest never grows back, BAU can later clear forest that a shocked run cleared earlier. In Malaysia the additional loss peaks at `r fmt0(mys$peak / 1e6)` Mt CO₂ in model year `r mys$peak_year` and falls to `r fmt0(mys$final / 1e6)` Mt CO₂ by `r final_year`, and `r n_narrowing` countries drop more than 5% below their peak. Globally the additional loss is still rising at the end of the run. The ILUC calculation will need to handle this timing.
+Because cleared forest never grows back, BAU can later clear forest that a shocked run cleared earlier. In Malaysia the additional loss peaks at `r fmt0(mys$peak / 1e6)` Mt CO₂ in model year `r mys$peak_year` and falls to `r fmt0(mys$final / 1e6)` Mt CO₂ by `r final_year`, and `r n_narrowing` countries drop more than 5% below their peak. Globally the additional loss is still rising at the end of the run. The ILUC estimates below only count loss within the accounting period, so this late catch-up does not affect them.
+
+### ILUC carbon intensity {#sec-results-iluc}
+
+```{r}
+#| label: iluc-table
+
+iluc_wide <- function(scn) iluc[iluc$scenario == scn, ]
+knitr::kable(
+  data.frame(
+    "Accounting period (years)" = accounting_years,
+    "Central: additional loss (Gt CO₂)" = iluc_wide("vo_central")$carbon_loss / 1e9,
+    "Central: ILUC (g CO₂/MJ)" = iluc_wide("vo_central")$g_per_mj,
+    "Central: VO-RD total (g CO₂e/MJ)" = vord_direct_ci + iluc_wide("vo_central")$g_per_mj,
+    "Sensitivity: additional loss (Gt CO₂)" = iluc_wide("vo_high")$carbon_loss / 1e9,
+    "Sensitivity: ILUC (g CO₂/MJ)" = iluc_wide("vo_high")$g_per_mj,
+    "Sensitivity: VO-RD total (g CO₂e/MJ)" = vord_direct_ci + iluc_wide("vo_high")$g_per_mj,
+    check.names = FALSE
+  ),
+  digits = c(0, 2, 1, 1, 2, 1, 1),
+  caption = paste0(
+    "ILUC carbon intensity of VO-RD for each accounting period, using ", fmt1(vord_mj_2035 / 1e12),
+    " EJ of VO-RD a year. VO-RD total adds the direct 42.3 g CO₂e/MJ [@seber2025, p. 6]; ",
+    "the fossil baseline is 93.3 [@seber2025, p. 1]."
+  )
+)
+```
+
+Over the `r headline_years`-year headline period, the central ILUC estimate is `r fmt1(il("vo_central", 25))` g CO₂/MJ. The 30-year value, `r fmt1(il("vo_central", 30))`, is the one to set against the 62 g CO₂e/MJ ICCT has used, since that number comes from a 2020–2050 window. Our estimates are lower than both published benchmarks. Part of the gap is scope: we count only forest biomass carbon, while Chen et al. also count peat (614 of their 1,086 Tg CO₂e) and soil carbon [@chen2026, Table 1, p. 13].
+
+```{r}
+#| label: iluc-country-chart
+#| fig-width: 7.5
+#| fig-height: 5
+
+# Contributions to the headline ILUC estimate: each country's additional loss after
+# headline_years years in the palm-only and soy-only runs, in g CO2 per MJ of VO-RD.
+iluc_year <- min(lum$year) + headline_years
+iluc_by_country <- lum |>
+  dplyr::filter(year == iluc_year, scenario %in% c("bau", "vo_central_palm", "vo_central_soy")) |>
+  dplyr::select(country, scenario, forest_carbon_tco2) |>
+  dplyr::summarise(
+    palm = forest_carbon_tco2[scenario == "bau"] - forest_carbon_tco2[scenario == "vo_central_palm"],
+    soy = forest_carbon_tco2[scenario == "bau"] - forest_carbon_tco2[scenario == "vo_central_soy"],
+    .by = country
+  ) |>
+  dplyr::mutate(
+    dplyr::across(c(palm, soy), \(x) x * 1e6 / (headline_years * vord_mj_2035)),
+    total = palm + soy
+  ) |>
+  dplyr::arrange(dplyr::desc(total))
+
+iluc_top_n <- 10
+iluc_top <- iluc_by_country$country[seq_len(iluc_top_n)]
+iluc_other <- sprintf("Other %d countries", sum(iluc_by_country$total > 0) - iluc_top_n)
+iluc_plot <- iluc_by_country |>
+  dplyr::mutate(label = ifelse(country %in% iluc_top, country, iluc_other)) |>
+  dplyr::summarise(`Oil palm` = sum(palm), Soybeans = sum(soy), .by = label)
+iluc_plot <- rbind(
+  data.frame(label = iluc_plot$label, crop = "Oil palm", g_per_mj = iluc_plot$`Oil palm`),
+  data.frame(label = iluc_plot$label, crop = "Soybeans", g_per_mj = iluc_plot$Soybeans)
+)
+iluc_plot$label <- factor(iluc_plot$label, levels = rev(c(iluc_top, iluc_other)))
+iluc_totals <- iluc_plot |> dplyr::summarise(g_per_mj = sum(g_per_mj), .by = label)
+
+ggplot2::ggplot(iluc_plot, ggplot2::aes(g_per_mj, label)) +
+  ggplot2::geom_col(
+    ggplot2::aes(fill = crop),
+    position = ggplot2::position_stack(reverse = TRUE),
+    width = 0.62, colour = col_surface, linewidth = 0.4
+  ) +
+  ggplot2::geom_text(data = iluc_totals, ggplot2::aes(label = fmt1(g_per_mj)), hjust = -0.2, size = 3.2, colour = "#0b0b0b") +
+  ggplot2::scale_fill_manual(values = col_crop, name = NULL) +
+  ggplot2::scale_x_continuous(expand = ggplot2::expansion(mult = c(0, 0.1))) +
+  ggplot2::labs(
+    title = "Contributions to the ILUC estimate by country and crop",
+    subtitle = paste0("Central scenario, ", headline_years, "-year accounting period"),
+    x = expression("g CO"[2] * " per MJ of VO-RD"),
+    y = NULL
+  ) +
+  theme_report() +
+  ggplot2::theme(panel.grid.major.y = ggplot2::element_blank())
+```
+
+`r iluc_by_country$country[1]` and `r iluc_by_country$country[2]` contribute `r fmt1(sum(iluc_by_country$total[1:2]))` of the `r fmt1(sum(iluc_by_country$total))` g CO₂/MJ, and the palm price increase accounts for `r fmt0(100 * sum(iluc_by_country$palm) / sum(iluc_by_country$total))`% of the total.
 
 ## Caveats and next steps
 
 Next steps:
 
-- Express the additional emissions as an ILUC carbon intensity (g CO₂e/MJ), with a breakdown by country.
+- Add peat and soil carbon, at least for Indonesia and Malaysia, so the ILUC estimate covers the same emissions as Chen et al.
 - Compare our copy of the model with upstream (snippet in `r/land_use_model/PROVENANCE.md`), which has been refactored since we copied it on 31 July 2026.
 
 What the estimates leave out or assume:
