@@ -1249,9 +1249,7 @@ knitr::kable(
 
 ## Appendix C: The model's crop mix and our crop-specific price shocks {#sec-crop-mix}
 
-This note is for the authors of emLab's land-use model. We want to check that we understand one part of the model, so that we use it correctly and caveat our results properly. We are not suggesting any change to the model.
-
-The model was built to study carbon prices, which compete with a cell's total agricultural revenue. We use it differently. We raise the prices of only two of its 17 crops, palm oil and soybeans, and we also read crop production off it to estimate a supply elasticity ([Methods](#sec-model-supply)). So how the model divides a cell's revenue among crops matters much more for us than for a carbon price. Below we set out how we understand the crop mix, what it implies for our price shocks, and how we caveat our results. Every number comes from the unmodified inputs and this repository's model run.
+This note is for the authors of emLab's land-use model. We want to confirm that we are using the model correctly, and we are not suggesting any change to it. The model was built for carbon prices, which compete with a cell's total agricultural revenue. We use it to shock just two crops, palm oil and soybeans, so how it splits a cell's revenue among crops matters much more for us.
 
 ```{r}
 #| label: crop-mix-data
@@ -1263,7 +1261,6 @@ cm_regions <- utils::read.csv(file.path("data", "derived", "crop_mix_regions.csv
 cm_countries <- utils::read.csv(file.path("data", "derived", "crop_mix_countries.csv"))
 cm_grid <- utils::read.csv(file.path("data", "derived", "crop_mix_grid.csv.gz"))
 pct <- function(x) paste0(formatC(100 * x, format = "f", digits = 1), "%")
-country_max <- function(cn) cm_countries$palm_share_max[cm_countries$country == cn]
 
 # Indonesia and Malaysia, +1% palm price, first year: the model and Chen et al. (2026).
 im_palm_share_of_cleared <- cm("im_model_extra_palm_t") / cm("im_model_palm_t_if_all_cleared_land_were_palm")
@@ -1272,37 +1269,45 @@ im_model_ha_per_cell_per_1000 <- (cm("im_model_extra_clearing_ha") / cm("im_cell
   (cm("im_model_d_rev_annual_crop_mix") / 1000)
 ```
 
-### How we understand the crop mix
+### What we found
 
-Each cell's revenue in `update_revenues()`, and its crop production in upstream's `endog_prices()`, weight the 17 crops by `harvested_share_gaez`. This column is in `K_endo_input_data.Rdata`, and identical in `B_suit_harvest_country_full.Rdata`. As we read the inputs, for the 1,450,769 cells the model simulates:
-
-- Each crop's share is set for each value of the `gaez` column of `B_suit_harvest_country_full.Rdata`, and is the same for every cell with that value. There are `r fmt0(cm("gaez_zones"))` values (for example `54_Europe`), which we take to be GAEZ zones within continents. Palm's share takes `r fmt0(cm("distinct_palm_shares"))` distinct values in all.
-- We assume this is because most simulated cells are forest with little cropland of their own, so the zone's crop mix stands in for what cleared land would grow.
-- The same file also has each cell's own harvested area by crop from M3 (`m3_harvested_area_ha`). As far as we can tell, the model doesn't use it.
-
-### What this means for a palm or soybean price shock
-
-Because the zones are broad, palm's share is spread across them. Palm is at most `r pct(cm("palm_share_max"))` of a cell's crop mix, including in the main palm frontiers (`r pct(cm_regions$palm_share_median[1])` in the median cell in Riau). It is also part of the crop mix well beyond them: more than 5% in `r fmt0(cm_countries$cells_palm_over_5pct[cm_countries$country == "Democratic Republic of the Congo"])` cells in the Democratic Republic of the Congo, and in thousands of cells in Angola, the Central African Republic, Tanzania and South Sudan. It is up to `r pct(max(country_max("Canada"), country_max("United States of America")))` in Canada and the United States. Where the frontier cells have cropland, M3 gives palm and soybeans larger shares of it:
+- **The crop mix is set per zone.** Each cell's revenue (`update_revenues()`) and crop production (`endog_prices()`) weight crops by `harvested_share_gaez`. That share is the same for every cell with the same `gaez` value (`r fmt0(cm("gaez_zones"))` values, such as `54_Europe`). We assume this gives forest cells, which have little cropland of their own, the crop mix of the wider area.
+- **For palm and soybeans, that mix differs a lot from the frontiers' own.** Palm is never more than `r pct(cm("palm_share_max"))` of a cell's crop mix, even in Riau. It is more than 5% in `r fmt0(cm_countries$cells_palm_over_5pct[cm_countries$country == "Democratic Republic of the Congo"])` cells in the Democratic Republic of the Congo. The cells' own M3 harvested areas, in the same input file, give the frontier crops much larger shares (table and map below).
+- **So, as we use the model, palm responds little to its own price.** In Indonesia and Malaysia, a 1% palm price rise produces `r fmt0(im_chen_palm_t / cm("im_model_extra_palm_t"))` times less palm oil from forest in the first year than Chen et al.'s econometric estimate implies [@chen2026, p. 5]. The model responds at least as strongly to revenue: about `r fmt0(im_model_ha_per_cell_per_1000)` ha cleared per cell per \$1,000/ha, against Chen et al.'s 9.3. The gap comes from palm's small share of revenue and of the cleared land.
+- **This drives two of our results.** The supply elasticity we read off the model (`r fmt_eps(eps_model("vegetable_oil"))`, against Roberts & Schlenker's 0.10) is tiny, and so the price shock built on it (`r fmt0(shock_2035$pct_delta_p_rs_model)`%) is huge. It also probably explains why the Democratic Republic of the Congo has the most additional loss in our results.
 
 ```{r}
 #| label: crop-mix-regions
 
+frontier_crop <- c("Palm", "Palm", "Soybeans", "Soybeans")
 knitr::kable(
   data.frame(
-    "Frontier" = cm_regions$region,
-    "Cells" = fmt0(cm_regions$cells),
-    "Palm share, model (median)" = pct(cm_regions$palm_share_median),
-    "Palm share, M3" = pct(cm_regions$palm_share_m3),
-    "Soybean share, model (median)" = pct(cm_regions$soy_share_median),
-    "Soybean share, M3" = pct(cm_regions$soy_share_m3),
-    "Cropland share of 2000–2020 forest loss" = pct(cm_regions$cropland_share_of_forest_loss),
+    "Frontier" = sub(" \\(.*", "", cm_regions$region),
+    "Crop" = frontier_crop,
+    "Share of crop mix, model" = pct(ifelse(frontier_crop == "Palm", cm_regions$palm_share_median, cm_regions$soy_share_median)),
+    "Share of harvested area, M3" = pct(ifelse(frontier_crop == "Palm", cm_regions$palm_share_m3, cm_regions$soy_share_m3)),
     check.names = FALSE
   ),
-  align = "lrrrrrr",
+  align = "llrr",
   caption = paste(
-    "Crop shares in four frontiers. Model: harvested_share_gaez, the zone-level share the model uses.",
-    "M3: the crop's share of all 17 crops' M3 harvested area (m3_harvested_area_ha) in the same cells.",
-    "Cropland share: def_for_ag_share weighted by each cell's 2000–2020 forest loss."
+    "The frontier crop's share in four frontiers. Model: harvested_share_gaez (median cell).",
+    "M3: the crop's share of all 17 crops' M3 harvested area (m3_harvested_area_ha) in the same cells."
+  )
+)
+
+knitr::kable(
+  data.frame(
+    "+1% palm price, first year" = c("Extra forest cleared (ha)", "Share of it counted as palm", "Extra palm oil (t)"),
+    "Model" = c(fmt0(cm("im_model_extra_clearing_ha")), pct(im_palm_share_of_cleared), fmt0(cm("im_model_extra_palm_t"))),
+    "Implied by Chen et al." = c(fmt0(cm("im_chen_extra_clearing_ha")), "100%", fmt0(im_chen_palm_t)),
+    check.names = FALSE
+  ),
+  align = "lrr",
+  caption = paste0(
+    "Indonesia and Malaysia. Chen et al.: +9.3 ha of forest-to-palm conversion per cell per \\$1,000/ha of annual ",
+    "attainable revenue, at their mean revenue (\\$1,933/ha) over 32,394 cells. Model: simulate_10_dt()'s first-year ",
+    "deforestation and endog_prices()'s production in its ", fmt0(cm("im_cells")), " cells there. Both use the model's palm yield (",
+    formatC(cm("im_model_palm_yield_t_per_ha"), format = "f", digits = 1), " t/ha)."
   )
 )
 ```
@@ -1346,73 +1351,15 @@ ggplot2::ggplot() +
   ggplot2::theme(strip.text = ggplot2::element_text(colour = "#0b0b0b", hjust = 0))
 ```
 
-### How much it matters: palm in Indonesia and Malaysia
+Until we hear back, we treat the model-derived supply elasticity and the scenario built on it as unreliable. We also caution against reading our country results as a map of where palm-driven deforestation would happen.
 
-@chen2026 [p. 5 and Supplementary Text S1.2] regress forest-to-palm conversion in Indonesia and Malaysia, 2002–2018, on the previous year's attainable palm revenue (world price × GAEZ attainable yield) in 9 km cells, with cell and country-year fixed effects. An extra \$1,000 per ha of annual revenue adds 9.3 ha of forest-to-palm conversion a year per cell; mean revenue was \$1,933 per ha, over 32,394 cells. We set this against the model's first-year response to a 1% rise in the palm price in its `r fmt0(cm("im_cells"))` cells in the two countries, which are about the same size as Chen et al.'s. The model's response uses `simulate_10_dt()`'s first-year deforestation rate and the revenues `01_prepare_data.R` builds:
+### Our questions
 
-```{r}
-#| label: crop-mix-chen
+1. Is a price change for individual crops, like ours, a use of the model you would expect to work, given that the crop mix is set per GAEZ zone?
+2. Should we simply use a published, market-wide supply elasticity (Roberts & Schlenker's 0.10, as in our primary scenario) instead of estimating our own from the model? If so, we will drop the scenario that uses the model's own.
+3. Given the crop mix, would you report our results by country, or only as global totals?
 
-knitr::kable(
-  data.frame(
-    "+1% palm price, first year" = c(
-      "Change in annual revenue per ha (\\$)",
-      "Extra forest cleared (ha)",
-      "Share of the cleared land counted as palm",
-      "Extra palm oil (t)",
-      "Implied elasticity of world palm oil supply from forest"
-    ),
-    "Model" = c(
-      formatC(cm("im_model_d_rev_annual_crop_mix"), format = "f", digits = 2),
-      fmt0(cm("im_model_extra_clearing_ha")),
-      pct(im_palm_share_of_cleared),
-      fmt0(cm("im_model_extra_palm_t")),
-      formatC(cm("im_model_elasticity"), digits = 2, format = "fg")
-    ),
-    "Implied by Chen et al." = c(
-      formatC(cm("im_chen_d_rev_annual_per_ha_palm"), format = "f", digits = 2),
-      fmt0(cm("im_chen_extra_clearing_ha")),
-      "100% (forest-to-palm conversion)",
-      fmt0(im_chen_palm_t),
-      formatC(cm("im_chen_elasticity"), digits = 2, format = "fg")
-    ),
-    check.names = FALSE
-  ),
-  align = "lrr",
-  caption = paste0(
-    "First-year response to a 1% palm price increase in Indonesia and Malaysia. Model revenue is annual ",
-    "(update_revenues() divides by 5%, which we undo), averaged over cells. Palm oil uses the model's palm yield ",
-    "where the extra clearing happens (", formatC(cm("im_model_palm_yield_t_per_ha"), format = "f", digits = 1),
-    " t/ha, m3_yield_ton_per_ha) for both columns, and the elasticity divides by world palm oil production ",
-    "in 2024/25 (USDA PSD)."
-  )
-)
-```
-
-As we use the model, it gives `r fmt0(im_chen_palm_t / cm("im_model_extra_palm_t"))` times less palm oil from forest than Chen et al.'s estimate implies. Three things account for it:
-
-- **The revenue change.** With palm at most `r pct(cm("palm_share_max"))` of the crop mix, a 1% palm price rise raises a cell's annual revenue by \$`r formatC(cm("im_model_d_rev_annual_crop_mix"), format = "f", digits = 2)` per ha. Per hectare of palm it would be \$`r formatC(cm("im_model_d_rev_annual_per_ha_palm"), format = "f", digits = 2)`. Chen et al.'s is \$`r formatC(cm("im_chen_d_rev_annual_per_ha_palm"), format = "f", digits = 2)`, because their attainable revenue per hectare is higher (different prices and GAEZ yields).
-- **The response per dollar.** Per \$1,000 per ha of extra annual revenue, the model clears about `r fmt0(im_model_ha_per_cell_per_1000)` ha per cell, against Chen et al.'s 9.3. So the model is at least as responsive to revenue, and its `r fmt1(cm("im_chen_extra_clearing_ha") / cm("im_model_extra_clearing_ha"))` times smaller clearing response comes from the smaller revenue change.
-- **How much cleared land counts as palm.** Following upstream's `endog_prices()` (cleared area × `def_for_ag_share` × `harvested_share_gaez` × `m3_yield_ton_per_ha`), `r pct(im_palm_share_of_cleared)` of the extra cleared land counts as palm: about a fifth to a third becomes cropland, and palm is at most `r pct(cm("palm_share_max"))` of the crop mix. Chen et al. measure forest-to-palm conversion directly.
-
-### How we caveat our results
-
-- **Our supply elasticity.** Reading a crop supply elasticity off the model is the step of our analysis most likely to be a misuse. With the zone-level crop mix, the model's palm and soybean production responds very little to their prices. So the elasticity we read off it (`r fmt_eps(eps_model("vegetable_oil"))`) is far below published estimates, and the price shock built on it (`r fmt0(shock_2035$pct_delta_p_rs_model)`%) is far above them. We report both, but as unreliable. Our primary scenario instead uses Roberts & Schlenker's published, market-wide supply elasticity (0.10), and we are considering relying on it alone (question 2 below).
-- **Where the loss falls.** Our palm price shock raises revenue wherever the zone-level crop mix includes palm, including large forested areas of Central Africa. That probably explains why the Democratic Republic of the Congo has the most additional loss in our results. We caution against reading our country results as a map of where palm-driven deforestation would happen.
-- **Not only the crop mix.** Even Chen et al.'s forest-only elasticity, `r formatC(cm("im_chen_elasticity"), digits = 2, format = "fg")`, is well below published supply elasticities (0.10), because land that wasn't forest, yields and other oil crops also add supply. When Chen et al. derive palm supply from their deforestation model, they scale forest conversion up by the forest share of palm expansion and by the region's share of world production, and they keep the annual oil crops' own elasticities [@chen2026, Supplementary Text S2.5]. A supply elasticity taken from the land-use model would need something similar.
-- **Our code reproduces the model.** The crop shares come straight from the input files. Our BAU revenue matches upstream's own 2020 revenue (`data_past$revenue`) to within 7e-12, and our BAU run matches upstream's reference run ([Appendix A](#sec-lum-changes)).
-
-### What we would like to confirm
-
-1. Is a price change for individual crops, like ours, a use of the model you would expect to work? Or is it meant for changes in a cell's total revenue, such as a carbon price?
-2. Would you agree that we should take the supply elasticity for our price shock from a published, market-wide estimate (Roberts & Schlenker's 0.10, as in our primary scenario), rather than try to estimate our own from the model? The model's supply response covers only new cropland on cleared forest, and for palm and soybeans it runs through the zone-level crop mix. If you agree, we would drop the scenario that uses the model's own elasticity.
-3. Is the crop mix meant to be set per `gaez` value (a GAEZ zone within a continent, as we read it), to give forest cells the crop mix of the wider area?
-4. Are `m3_harvested_area_ha` and `harvested_share_grid` in `suit_harvest_country` used anywhere in the model, or only kept for reference?
-5. Does `data_past$revenue`, the revenue in the estimation data, use the same zone-level shares in every year?
-6. If we did keep an elasticity from the model: would you measure production growth against world production, as we do, or against production in the modeled cells (`supply_crop_2020`), as the endogenous-price routine does? The second would make our palm elasticity `r fmt1(world_mt[["palm"]] * 1e6 / cm("supply_crop_2020_palm_t"))` times larger and our soybean elasticity `r fmt1(world_mt[["soy"]] * 1e6 / cm("supply_crop_2020_soy_t"))` times larger.
-7. Have we described correctly how the model turns cleared forest into crop production (`def_for_ag_share` × `harvested_share_gaez` × `m3_yield_ton_per_ha`, as in `endog_prices()`)?
-
-To reproduce: `r/audit_crop_mix.R` reads the unmodified inputs and this repository's model run and writes the `data/derived/crop_mix_*.csv` files used above. `r/land_use_model/00d_supply_curve.R` traces the supply curves ([Appendix A](#sec-lum-changes), item 17).
+`r/audit_crop_mix.R` reproduces every number here from the unmodified inputs and this repository's model run.
 
 ## References
 
