@@ -37,17 +37,23 @@ soy_oil_value_share <- 4.72 / (4.72 + 8.66)
 # Additional forest loss relative to BAU: BAU stock minus scenario stock, so positive = more loss.
 bau <- lum |>
   dplyr::filter(scenario == "bau") |>
-  dplyr::select(country, year, carbon_bau = forest_carbon_tco2, area_bau = forest_area_ha)
+  dplyr::select(
+    country, year, carbon_bau = forest_carbon_tco2, area_bau = forest_area_ha,
+    palm_bau = forest_palm_oil_t, soy_bau = forest_soybeans_t
+  )
 loss <- lum |>
   dplyr::filter(scenario %in% c("vo_rs", "vo_rs_model", "vo_rs_palm", "vo_rs_soy")) |>
   dplyr::inner_join(bau, by = c("country", "year")) |>
   dplyr::mutate(
     carbon_loss = carbon_bau - forest_carbon_tco2, # t CO2
-    area_loss = area_bau - forest_area_ha # ha
+    area_loss = area_bau - forest_area_ha, # ha
+    # t a year grown on the extra land cleared (the model's conversion; see 03_summarise_results.R)
+    extra_palm_oil_t = palm_bau - forest_palm_oil_t,
+    extra_soybeans_t = soy_bau - forest_soybeans_t
   )
 global_loss <- loss |>
   dplyr::summarise(
-    dplyr::across(c(carbon_loss, area_loss, carbon_bau, area_bau), sum),
+    dplyr::across(c(carbon_loss, area_loss, carbon_bau, area_bau, extra_palm_oil_t, extra_soybeans_t), sum),
     .by = c(scenario, year)
   )
 gl <- function(scn, yr, var) global_loss[[var]][global_loss$scenario == scn & global_loss$year == yr]
@@ -847,6 +853,67 @@ ggplot2::ggplot(global_ts, ggplot2::aes(years_after_shock, carbon_gt, colour = s
 
 About half of the full-run loss happens in the first 15 years: `r fmt0(100 * gl("vo_rs", 2035, "carbon_loss") / gl("vo_rs", final_year, "carbon_loss"))`% in the Roberts & Schlenker scenario and `r fmt0(100 * gl("vo_rs_model", 2035, "carbon_loss") / gl("vo_rs_model", final_year, "carbon_loss"))`% with the land-use model's own supply elasticity. The maps, charts and country table below show the Roberts & Schlenker scenario.
 
+#### Check: does the cleared land supply the oil? {#sec-results-check}
+
+The price shock and the land-use model fit together only if the land the model clears grows about as much extra oil as the shock assumes. The table compares the two, and turns the oil into the supply elasticity the model actually delivers at each scenario's price.
+
+```{r}
+#| label: land-oil-check
+
+# Extra palm and soybean oil grown on the extra land each scenario clears (01_prepare_data.R's
+# per-pixel crop output, totalled by 03_summarise_results.R), against the extra oil supply its
+# price shock assumes (eps_s x %dP x Q0). The realized supply elasticity is that extra oil as a
+# share of Q0, divided by the price change; realized / assumed = extra oil / assumed extra supply.
+check_scenarios <- c(vo_rs = "Roberts & Schlenker", vo_rs_model = "Land-use model supply")
+check_shock <- c(vo_rs = shock_rs, vo_rs_model = shock_model)
+check_eps <- c(vo_rs = eps_s_rs, vo_rs_model = eps_s_model)
+check <- expand.grid(scenario = names(check_scenarios), years = c(1, 15, 25), stringsAsFactors = FALSE)
+check$cleared_mha <- mapply(\(s, y) gl(s, min(lum$year) + y, "area_loss"), check$scenario, check$years) / 1e6
+check$oil_mt <- mapply(
+  \(s, y) gl(s, min(lum$year) + y, "extra_palm_oil_t") + soy_oil_per_bean * gl(s, min(lum$year) + y, "extra_soybeans_t"),
+  check$scenario, check$years
+) / 1e6
+check$assumed_mt <- check_eps[check$scenario] * check_shock[check$scenario] / 100 * q0_mt
+check$eps_realized <- (check$oil_mt / q0_mt) / (check_shock[check$scenario] / 100)
+check <- check[order(match(check$scenario, names(check_scenarios)), check$years), ]
+ck <- function(scn, yrs, var) check[[var]][check$scenario == scn & check$years == yrs]
+
+# Least land that would grow the assumed extra supply: all of it palm, at the world's average palm oil yield.
+psd_palm <- psd[psd$Commodity_Description == "Oil, Palm" & psd$Market_Year == q0_market_year, ]
+palm_oil_yield <- sum(psd_palm$Value[psd_palm$Attribute_Description == "Production"]) /
+  sum(psd_palm$Value[psd_palm$Attribute_Description == "Area Harvested"]) # t/ha (both in thousands)
+land_needed_mha <- check_eps[["vo_rs"]] * check_shock[["vo_rs"]] / 100 * q0_mt / palm_oil_yield
+
+knitr::kable(
+  data.frame(
+    "Scenario" = check_scenarios[check$scenario],
+    "Years after shock" = check$years,
+    "Extra forest cleared (Mha)" = fmt1(check$cleared_mha),
+    "Oil grown on it (Mt a year)" = formatC(check$oil_mt, format = "f", digits = 2),
+    "Extra oil supply the price shock assumes (Mt a year)" = formatC(check$assumed_mt, format = "f", digits = 2),
+    "Supply elasticity, realized" = vapply(check$eps_realized, fmt_eps, character(1)),
+    "Supply elasticity, assumed" = vapply(check_eps[check$scenario], fmt_eps, character(1)),
+    check.names = FALSE
+  ),
+  row.names = FALSE,
+  align = "lrrrrrr",
+  caption = paste(
+    "Oil grown on the extra land each scenario clears, counted the way the model's own code counts it",
+    "(cleared area × cropland share × crop mix × yield; soybeans converted to oil at 11 lb per 60 lb bushel),",
+    "against the extra supply the price shock assumes. Realized supply elasticity: that oil as a share of",
+    "world production of the four oils, divided by the price change."
+  )
+)
+```
+
+In the Roberts & Schlenker scenario, the price shock assumes the world grows `r fmt1(ck("vo_rs", 1, "assumed_mt"))` Mt a year more vegetable oil, and that other buyers use `r fmt1(d_mt - ck("vo_rs", 1, "assumed_mt"))` Mt less, together making up the `r fmt0(d_mt)` Mt the ships use. Grown entirely as palm at the world's average yield (`r formatC(palm_oil_yield, format = "f", digits = 2)` t/ha in 2024/25 [@usdapsd]), that new supply would take at least `r fmt0(land_needed_mha)` Mha. The model clears `r fmt1(ck("vo_rs", 15, "cleared_mha"))` Mha more forest than BAU within 15 years and `r fmt1(ck("vo_rs", 25, "cleared_mha"))` Mha within 25, so the land is of the same order. But it counts only `r formatC(ck("vo_rs", 25, "oil_mt"), format = "f", digits = 2)` Mt a year of palm and soybean oil grown on that land after 25 years, `r fmt1(100 * ck("vo_rs", 25, "oil_mt") / ck("vo_rs", 25, "assumed_mt"))`% of the assumed new supply. That is `r formatC(ck("vo_rs", 25, "oil_mt") / ck("vo_rs", 25, "cleared_mha"), format = "f", digits = 3)` t per hectare cleared, against `r formatC(palm_oil_yield, format = "f", digits = 2)` t/ha for palm. As an elasticity, the shock that assumes 0.10 produces `r fmt_eps(ck("vo_rs", 1, "eps_realized"))` in the first year and `r fmt_eps(ck("vo_rs", 25, "eps_realized"))` after 25 years.
+
+What this means:
+
+- **The ILUC estimates don't rest on this accounting.** They count the carbon in all the extra forest cleared, whatever the land is used for afterwards. So a large ILUC value and a tiny supply elasticity are consistent: in the model, a higher price causes a lot of extra clearing, but little of the cleared land counts as palm or soybean cropland ([Appendix C](#sec-crop-mix)).
+- **The gap has two possible readings.** Either the cleared land grows far more oil than the model's accounting counts (`r fmt1(ck("vo_rs", 25, "cleared_mha"))` Mha of palm at average yields would grow `r fmt0(ck("vo_rs", 25, "cleared_mha") * palm_oil_yield)` Mt a year), or most of the new supply comes from land that wasn't forest, higher yields and other oil crops. The land-use effects of those other sources are not in our estimate.
+- **The model-supply scenario is roughly consistent in its first year** (`r fmt_eps(ck("vo_rs_model", 1, "eps_realized"))` realized against `r fmt_eps(eps_s_model)` assumed; the supply curve flattens at high prices, so the elasticity over a large price rise is higher than at baseline prices). After that, the model's supply keeps growing.
+
 #### Where the loss falls
 
 ```{r}
@@ -1103,6 +1170,7 @@ What the estimates leave out or assume:
 - We make no adjustment for soy meal in the oil-price shock, which overstates it.
 - Our primary price shock uses Roberts & Schlenker's supply elasticity of 0.10, about `r fmt0(signif(0.10 / eps_model("vegetable_oil"), 1))` times the land-use model's own one-year supply elasticity of `r formatC(eps_model("vegetable_oil"), digits = 2, format = "fg")` ([Methods](#sec-model-supply)). So the price we give the model is not the one its own supply response would produce. The alternative scenario uses the model's own elasticity. That makes the two steps consistent, but it assumes that only new cropland on cleared forest adds supply, which inflates the price shock.
 - Roberts & Schlenker's elasticities are for the world market in staple calories (maize, wheat, rice and soybeans), not for vegetable oils.
+- The land the model clears grows, by its own accounting, only about 1% of the extra oil the Roberts & Schlenker price shock assumes ([check](#sec-results-check)). Either that land grows more oil than the model counts, or most of the new supply comes from land that wasn't forest, higher yields and other oil crops, whose land-use effects we leave out.
 - One global price change applies in every country, as if supply and the pass-through of world prices to farmers were the same everywhere. They are not, so the split of the loss across countries is less certain than the global total. Country effects are held at their 2016–2020 average, and the model pools some small neighboring countries into regions. Each cell gets the crop mix of a broad GAEZ zone, so our palm price shock is spread thinly in the palm frontiers and reaches much of Central Africa; this probably explains why the Democratic Republic of the Congo ranks first ([Appendix C](#sec-crop-mix)).
 - Prices jump once in the first model year and stay there, and cleared forest never grows back (see [Methods](#sec-land-use-model)).
 
@@ -1166,6 +1234,11 @@ This lists every change we made to the emLab land-use model to run the price sce
     - Revenue at each price is BAU revenue plus multiples of the revenue change from a +100% palm step and a +100% soybean step, each from `update_revenues()`. This is exact because revenue is linear in each price, and it avoids rerunning `update_revenues()` for every price vector.
     - It writes `data/derived/land_use_supply_curve.csv`: extra forest loss and extra palm-oil and soybean production by experiment, price change, and years after the change (1, 5, 10, 25).
 
+**Crop output, for the land-and-oil check ([Results](#sec-results-check))**
+
+18. `01_prepare_data.R`, Section 6: computes each pixel's output per 30 m pixel of forest cleared (`palm_oil_t_per_px`, `soybeans_t_per_px`), using upstream's conversion in `endog_prices()`: `ha_pixel` × `def_for_ag_share` × `harvested_share_gaez` × `m3_yield_ton_per_ha`, with NAs counted as zero. Section 8 adds both columns to the chunk files and stops if any is missing; `02` doesn't use them.
+19. `03_summarise_results.R`: adds `forest_palm_oil_t` and `forest_soybeans_t` to `land_use_country_results.csv.gz`. These are the palm oil and soybeans the remaining forest would yield if cleared (remaining forest pixels, `biomass / CF_pix`, times each pixel's output). BAU minus a scenario gives the extra output on the extra land that scenario clears.
+
 **Verification** (200-pixel sample inputs, `1_input/smpl`):
 
 - BAU emissions per pixel, annualized the same way as `03`'s `bl_emit_co2_y`, match upstream's reference run (`5_validation/sim_results_exog_ref_smpl.csv`) to within 0.003% for all 201 pixels.
@@ -1178,7 +1251,8 @@ This lists every change we made to the emLab land-use model to run the price sce
 - `vo_rs_palm` and `vo_rs_soy` sum to `vo_rs` to within 0.11% of its additional loss 15 years after the shock, and to within 0.02% at the end of the horizon.
 - `03_summarise_results.R`: BAU 2020 forest carbon summed by country equals `01`'s per-pixel 2020 biomass, and each scenario's gridded loss equals its country-level loss.
 - `00d_supply_curve.R`: the revenue shortcut matches a direct `update_revenues()` call (palm +150%, soybeans +50%) to within 1e-10. Its BAU and +20% runs reproduce `02`'s global forest carbon 1, 5, 10 and 25 years after the shock to within 1e-9. `ha_pixel` equals upstream's `CF_pix / CF` to within 1e-13. The 57 price-change simulations take 168 s after the inputs load.
-- Runtime on a 64 GB laptop, six scenarios: `01` 238 s (peak memory ~27 GB), `02` 142 s, `03_summarise_results.R` 43 s.
+- Items 18–19: rerunning the pipeline with them leaves every country × scenario × year forest carbon and area total unchanged. The extra palm oil and soybeans for `vo_rs` in the first year (146.3 kt and 14.8 kt) match a separate recomputation from `02`'s per-pixel results.
+- Runtime on a 64 GB laptop, six scenarios: `01` 240 s (peak memory ~27 GB), `02` 141 s, `03_summarise_results.R` 58 s.
 
 ## Appendix B: Results of the +20% test run {#sec-test-run}
 

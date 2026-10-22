@@ -6,7 +6,10 @@
 # PURPOSE:
 # Reduces the per-pixel results of 02_run_simulations.R to two small files for report.qmd:
 # - data/derived/land_use_country_results.csv.gz: country x scenario x year totals of forest
-#   carbon (t CO2) and forest area (ha).
+#   carbon (t CO2) and forest area (ha), and of the palm oil and soybeans (t) the remaining forest
+#   would yield if cleared (forest_palm_oil_t, forest_soybeans_t, using 01_prepare_data.R's
+#   per-pixel crop output). BAU minus a scenario gives the extra crop output on the extra land
+#   that scenario clears.
 # - data/derived/land_use_grid_loss.csv.gz: for mapping, each MAP_RES_DEG grid square's 2020
 #   forest carbon and its additional forest carbon loss relative to BAU in the final model year,
 #   one column per scenario (t CO2).
@@ -54,19 +57,25 @@ summarise_pair <- function(result_file, chunk_file) {
   options(arrow.use_threads = FALSE)
 
   px  <- data.table::as.data.table(
-    arrow::read_parquet(chunk_file, col_select = c("pixel_id", "country", "CF"))
+    arrow::read_parquet(chunk_file, col_select = c("pixel_id", "country", "CF", "CF_pix",
+                                                   "palm_oil_t_per_px", "soybeans_t_per_px"))
   )
   res <- data.table::as.data.table(arrow::read_parquet(result_file))
   n_res <- nrow(res)
 
   res <- px[res, on = "pixel_id"]
-  if (nrow(res) != n_res || anyNA(res$country) || anyNA(res$CF)) {
+  if (nrow(res) != n_res || anyNA(res[, .(country, CF, CF_pix, palm_oil_t_per_px, soybeans_t_per_px)])) {
     stop("Join of ", basename(result_file), " with ", basename(chunk_file),
-         " changed row count or left pixels without country/CF")
+         " changed row count or left pixels without country, CF or crop output")
   }
 
-  country <- res[, .(forest_carbon_tco2 = sum(biomass), forest_area_ha = sum(biomass / CF)),
-                 by = .(country, scenario = scn, year)]
+  # biomass / CF_pix is the pixel's remaining forest in 30 m pixels (biomass = share x CF_pix x pixel_count).
+  country <- res[, .(
+    forest_carbon_tco2 = sum(biomass),
+    forest_area_ha     = sum(biomass / CF),
+    forest_palm_oil_t  = sum(biomass / CF_pix * palm_oil_t_per_px),
+    forest_soybeans_t  = sum(biomass / CF_pix * soybeans_t_per_px)
+  ), by = .(country, scenario = scn, year)]
 
   # Per-pixel additional loss vs BAU in the final year (positive = more loss than BAU).
   final <- res[year == max(year), .(pixel_id, scenario = scn, biomass)]
@@ -88,8 +97,8 @@ future::plan(future::sequential)
 
 # --- Country totals: countries span chunks, so sum the per-chunk partial totals ---
 country_results <- data.table::rbindlist(lapply(partials, `[[`, "country"))[
-  , .(forest_carbon_tco2 = sum(forest_carbon_tco2), forest_area_ha = sum(forest_area_ha)),
-  by = .(country, scenario, year)
+  , lapply(.SD, sum), by = .(country, scenario, year),
+  .SDcols = c("forest_carbon_tco2", "forest_area_ha", "forest_palm_oil_t", "forest_soybeans_t")
 ][order(country, scenario, year)]
 
 # Check: BAU 2020 forest carbon must equal 01's independently written per-pixel 2020 biomass.

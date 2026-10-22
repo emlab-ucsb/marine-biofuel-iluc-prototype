@@ -415,6 +415,18 @@ stopifnot(
 )
 cat("revenue_wide assembled:", nrow(revenue_wide), "pixels x", ncol(revenue_wide), "cols\n")
 
+# Crop output per 30 m pixel of forest cleared, for report.qmd's land-and-oil check (summed by
+# 03_summarise_results.R): t of palm oil and of soybeans, with upstream's conversion in
+# endog_prices(): ha_pixel x def_for_ag_share x harvested_share_gaez x m3_yield_ton_per_ha, NAs
+# counted as zero as in its na.rm sums. 00d_supply_curve.R uses the same conversion.
+crop_output_per_px <- endo_input_data %>%
+  dplyr::filter(crop %in% c("Oil, palm", "Soybeans"), pixel_id %in% data_past$pixel_id) %>%
+  dplyr::mutate(t_per_px = ha_pixel * dplyr::coalesce(def_for_ag_share, 0) *
+                  dplyr::coalesce(harvested_share_gaez * m3_yield_ton_per_ha, 0)) %>%
+  dplyr::select(pixel_id, crop, t_per_px) %>%
+  tidyr::pivot_wider(names_from = crop, values_from = t_per_px) %>%
+  dplyr::rename(palm_oil_t_per_px = `Oil, palm`, soybeans_t_per_px = Soybeans)
+
 # Free the two largest objects now that revenues are computed
 rm(endo_input_data, suit_harvest_country, prod_oil)
 gc()
@@ -492,7 +504,8 @@ sim_input <- data_past %>%
   left_join(gamma_df,         by = "pixel_id") %>%  # adds pixel_fe  (fi scenario)
   left_join(gamma_df_ai,      by = "pixel_id") %>%  # adds ai_pixel_fe (ai scenario)
   left_join(country_fe_lookup, by = "pixel_id") %>%  # adds yc_fe
-  left_join(revenue_wide,     by = "pixel_id")       # adds revenue_<scenario> columns
+  left_join(revenue_wide,     by = "pixel_id") %>%   # adds revenue_<scenario> columns
+  left_join(crop_output_per_px, by = "pixel_id")     # adds palm_oil_t_per_px, soybeans_t_per_px
 
 # --- Critical integrity assertions before chunking ---
 stopifnot("sim_input has wrong number of rows"    = nrow(sim_input) == n_pixels)
@@ -503,6 +516,8 @@ stopifnot("NA values in lag_remaining_treecover"  = !anyNA(sim_input$lag_remaini
 stopifnot("NA values in pixel_count"              = !anyNA(sim_input$pixel_count))
 stopifnot("NA values in CF"                       = !anyNA(sim_input$CF))
 stopifnot("NA values in CF_pix"                   = !anyNA(sim_input$CF_pix))
+stopifnot("Missing or non-finite crop output per pixel" =
+            all(is.finite(sim_input$palm_oil_t_per_px)) && all(is.finite(sim_input$soybeans_t_per_px)))
 
 # Verify all revenue columns are present and complete
 expected_rev_cols <- paste0("revenue_", names(PRICE_SCENARIOS))
@@ -522,7 +537,7 @@ readr::write_csv(pixel_attrs, file.path(output_dir, "grid_smry.csv"))
 cat("pixel_attributes.csv saved:", nrow(pixel_attrs), "pixels\n")
 
 # Free fixed effect tables and revenue wide (now merged into sim_input)
-rm(gamma_df, gamma_df_ai, revenue_wide, delta_df, country_fe_lookup, data_past)
+rm(gamma_df, gamma_df_ai, revenue_wide, crop_output_per_px, delta_df, country_fe_lookup, data_past)
 gc()
 
 
