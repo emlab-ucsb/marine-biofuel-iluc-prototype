@@ -41,3 +41,8 @@ quarto render
 
 The output will be written to `_site/`. Note that `_site/` is not tracked in git, since GitHub renders the report automatically using GitHub Actions each time  changes to `report.qmd` or `_quarto.yml` are pushed to the `main` branch.
 
+## Use of generative AI
+
+Claude (Anthropic, model Opus 5.5) was used through Claude Code as a coding and writing assistant. It drafted and edited much of the R code, including the changes to the vendored land-use model listed in the report's Appendix A, and much of the report prose, and it helped find and check sources. GitHub Copilot's coding agent set up the initial Quarto report and GitHub Pages workflow. We set the research question and scenarios, chose the data sources and key assumptions, and reviewed the code and text. The AI tools are not authors, and we are responsible for all code, analysis and conclusions.
+
+The AI tools produced no data or results: every number, figure and table in the report is computed from the code in this repository when the report is rendered. Most commits made with Claude's help carry a `Co-Authored-By: Claude` trailer.

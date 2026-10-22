@@ -864,6 +864,10 @@ What the estimates leave out or assume:
 - The price step assumes a supply elasticity of about 0.12. We have not checked whether the land-use model's own supply response matches.
 - Prices jump once in the first model year and stay there, and cleared forest never grows back (see [Methods](#sec-land-use-model)).
 
+## Use of generative AI
+
+We used Claude (Anthropic, model Opus 5.5) through Claude Code as a coding and writing assistant. It drafted and edited much of the R code, including the changes to the land-use model in [Appendix A](#sec-lum-changes), and much of this report's prose, and it helped find and check sources. GitHub Copilot's coding agent set up the initial Quarto report and GitHub Pages workflow. We set the research question and scenarios, chose the data sources and key assumptions, and reviewed the code and text. The AI tools are not authors, and we are responsible for all code, analysis and conclusions. The AI tools produced no data or results: every number, figure and table is computed by the code in the [GitHub repository](https://github.com/emlab-ucsb/marine-biofuel-iluc-prototype) when the report is built.
+
 ## Appendix A: Changes to the land-use model code {#sec-lum-changes}
 
 This lists every change we made to the emLab land-use model to run the price scenarios, for the model's authors to review. Starting point: upstream `emlab-ucsb/land-based-solutions`, `r/robert_test/parallelization/` at commit `e207c2b` (31 July 2026), copied to `r/land_use_model/` (see `r/land_use_model/PROVENANCE.md`). Anything not listed here is unchanged.
