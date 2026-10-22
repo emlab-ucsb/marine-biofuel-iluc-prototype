@@ -1,2 +1,2 @@
-"year","vo_demand_billion_liters","demand_share_pct","pct_delta_p_central","pct_delta_p_high","beyond_marginal"
-2035,139.3,62.9174869531492,156.424490505577,419.449913020994,TRUE
+"year","vo_demand_billion_liters","demand_share_pct","pct_delta_p_rs","pct_delta_p_rs_model","beyond_marginal","eps_d","eps_s_rs","eps_s_model"
+2035,139.3,62.9174869531492,419.449913020994,1254.98635625724,TRUE,-0.05,0.1,0.000134000771760332

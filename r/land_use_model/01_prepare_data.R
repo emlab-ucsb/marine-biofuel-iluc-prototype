@@ -73,8 +73,9 @@ CP <- 0
 # onto the land-use model's crops".
 SOY_OIL_VALUE_SHARE <- 4.72 / (4.72 + 8.66)
 
-# Vegetable-oil price shocks (%) for 2035 from the price-shock analysis in report.qmd: central
-# (Chen et al. elasticities) and high (Roberts & Schlenker sensitivity).
+# Vegetable-oil price shocks (%) for 2035 from the price-shock analysis in report.qmd, both with
+# Roberts & Schlenker's demand elasticity: rs uses their supply elasticity too; rs_model uses this
+# model's own one-year supply elasticity, from 00d_supply_curve.R.
 vo_shock_2035 <- readr::read_csv(here::here("data/derived/vegetable_oil_price_shock_2035.csv"),
                                  show_col_types = FALSE)
 stopifnot("Expected one 2035 row in vegetable_oil_price_shock_2035.csv" =
@@ -85,14 +86,14 @@ vo_scenario <- function(pct_oil) {
 }
 
 PRICE_SHOCKS <- list(
-  bau        = c(),
-  vo_20pct   = c("Oil, palm" = 20, "Soybeans" = 20),  # smoke test: uniform +20%, no soy pass-through
-  vo_central = vo_scenario(vo_shock_2035$pct_delta_p_central),
-  vo_high    = vo_scenario(vo_shock_2035$pct_delta_p_high),
-  # Crop attribution for the central shock: each crop's price shocked alone. The deforestation
-  # model is nonlinear, so palm-only + soy-only need not sum exactly to vo_central.
-  vo_central_palm = vo_scenario(vo_shock_2035$pct_delta_p_central)["Oil, palm"],
-  vo_central_soy  = vo_scenario(vo_shock_2035$pct_delta_p_central)["Soybeans"]
+  bau         = c(),
+  vo_20pct    = c("Oil, palm" = 20, "Soybeans" = 20),  # smoke test: uniform +20%, no soy pass-through
+  vo_rs       = vo_scenario(vo_shock_2035$pct_delta_p_rs),
+  vo_rs_model = vo_scenario(vo_shock_2035$pct_delta_p_rs_model),
+  # Crop attribution for the rs shock: each crop's price shocked alone. The deforestation
+  # model is nonlinear, so palm-only + soy-only need not sum exactly to vo_rs.
+  vo_rs_palm  = vo_scenario(vo_shock_2035$pct_delta_p_rs)["Oil, palm"],
+  vo_rs_soy   = vo_scenario(vo_shock_2035$pct_delta_p_rs)["Soybeans"]
 )
 
 # Discount rate and social cost of carbon — shared across all three scripts via model_params.rds
