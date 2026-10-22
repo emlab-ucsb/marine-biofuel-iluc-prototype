@@ -695,7 +695,7 @@ curve_names <- c(
   "Demand today (ε = −0.05)",
   "Demand with 2035 marine demand",
   "Supply, Roberts & Schlenker (ε = 0.10)",
-  "Supply, land-use model (1 year)"
+  paste0("Supply, land-use model (1 year, ε = ", fmt_eps(eps_s_model), ")")
 )
 p_grid <- seq(-50, 1500, by = 10)
 market_curves <- rbind(
