@@ -1,6 +1,6 @@
 ---
 title: "ILUC implications of marine biofuel demand under the IMO Net-Zero Framework"
-subtitle: "Prototype analysis: preliminary results, to be used with extreme caution"
+subtitle: "Prototype analysis: preliminary and exploratory results"
 authors: Environmental Markets Lab (emLab), University of California, Santa Barbara (UCSB). For the International Council on Clean Transportation (ICCT)
 date: today
 format:
@@ -159,16 +159,11 @@ basemap <- utils::read.csv(file.path("data", "natural_earth", "ne_110m_admin_0_c
 ```
 
 ::: {.callout-warning}
-## Preliminary: use with extreme caution
+## Preliminary and exploratory
 
-This is a prototype. Read its numbers as rough orders of magnitude, not as estimates for policy, regulation or carbon accounting, and expect them to change as the work develops. In particular:
+This is a prototype, and its numbers are rough. Read them as the likely scale of the effect rather than as estimates for policy, regulation or carbon accounting, and expect them to change as the work develops.
 
-- The price shock drives everything else, and it is rough: a linear formula meant for small changes, applied to a demand increase of `r fmt0(shock_2035$demand_share_pct)`% of the world vegetable-oil market.
-- emLab's land-use model, which turns prices into forest loss here, has its own supply response, and it is far smaller than published estimates ([Methods](#sec-model-supply)). So the price shock and the model are not fully consistent ([check](#sec-results-check)).
-- Country results are the least reliable part. We apply one global price change everywhere, and the model gives every location the crop mix of a broad surrounding zone, which sends part of the palm response to Central Africa ([Appendix C](#sec-crop-mix)).
-- We count only carbon in forest biomass. Peat, soil carbon, lost sequestration, rapeseed and sunflower are all left out.
-
-[Caveats](#sec-caveats) has the full list.
+Three things matter most. The price shock that drives everything else comes from a simple formula meant for small changes, while marine demand would equal `r fmt0(shock_2035$demand_share_pct)`% of today's world vegetable-oil production. The land-use model that turns prices into forest loss has a much weaker supply response than published estimates, so the two halves of the analysis don't fully line up ([Methods](#sec-model-supply), [check](#sec-results-check)). And the country results are the least reliable part: we apply one world price everywhere, and the model's broad crop zones send some of the palm response to Central Africa ([Appendix C](#sec-crop-mix)). We also count only carbon in forest biomass, so peat and soil carbon are missing. The [Caveats](#sec-caveats) section has the full list.
 :::
 
 ## Summary
@@ -383,7 +378,16 @@ Notes on these choices:
 
 ### The emLab model's own supply elasticity {#sec-model-supply}
 
-The emLab model has a supply response of its own: a higher price raises the potential farm revenue of each grid cell (about 9 km across), more forest is cleared, and some of the cleared land grows the crop. To measure it, we raise the palm price, the soybean price or both (soybeans by $s$ times the palm change; see the [mapping](#sec-mapping)) by −50% to +1,500%, simulate forward from 2020 at a zero carbon price, and convert the extra forest cleared into extra production the way the emLab model's own code does: cleared area × the share of the cell's 2000–2020 forest loss that became cropland × the cell's crop mix × yield. Palm counts as oil and soybeans as beans; for vegetable oil we add the oil in the soybeans, at 11 lb per 60 lb bushel [@janzen2025, Fig. 2]. Dividing by 2024/25 world production [@usdapsd] puts the elasticities on the same footing as published ones.
+The emLab model has a supply response of its own: a higher price raises the potential farm revenue of each grid cell (about 9 km across), more forest is cleared, and some of the cleared land grows the crop. We measure it by raising prices, simulating forward from 2020 at a zero carbon price, and counting the extra crop grown on the extra forest cleared, the way the emLab model's own code does: cleared area × the share of the cell's 2000–2020 forest loss that became cropland × the cell's crop mix × yield.
+
+The price shock needs a single supply elasticity for the whole vegetable-oil market, but the model has two oil crops, priced in different units. We combine them the same way the price shock enters the model:
+
+1. A 1% rise in the vegetable-oil price raises the palm price 1% and the soybean price `r formatC(soy_oil_value_share, format = "f", digits = 2)`%, because soybeans are priced as whole beans and oil is about a third of their value (see the [mapping](#sec-mapping)).
+2. We simulate one year and count the extra palm oil and the extra soybeans grown on newly cleared land.
+3. We put both in tonnes of oil. Palm is already counted as oil; soybeans convert at 11 lb of oil per 60 lb bushel, or `r fmt0(100 * 11 / 60)`% [@janzen2025, Fig. 2]. Adding the two gives the extra vegetable oil.
+4. We divide that extra oil by world production of all four oils in 2024/25 [@usdapsd], $Q_0$ = `r fmt0(q0_mt)` Mt, and then by the 1% price change. Rapeseed and sunflower aren't in the model, so they add no supply, but they stay in $Q_0$ because the price formula uses the four-oil market.
+
+We average a 1% rise and a 1% fall, which gives the elasticity at today's prices. We also trace the whole curve, from −50% to +1,500%, and repeat the calculation 5, 10 and 25 years out. For comparison with Chen et al.'s crop-specific estimates, we also raise each crop's price on its own, and measure palm oil against world palm oil production and soybeans against world soybean production.
 
 ```{r}
 #| label: model-supply-curve
@@ -470,7 +474,7 @@ fmt_eps <- function(x) formatC(x, digits = 2, format = "fg")
 knitr::kable(
   data.frame(
     "Supply of" = c("Palm oil", "Soybeans", "Vegetable oil"),
-    "Price changed" = c("Palm", "Soybeans", "Palm, and soybeans by s times as much"),
+    "Price changed" = c("Palm", "Soybeans", paste0("Both: palm +1%, soybeans +", formatC(soy_oil_value_share, format = "f", digits = 2), "% (per 1% vegetable-oil price)")),
     "1 year" = fmt_eps(sapply(names(crop_labels), eps_model, yrs = 1)),
     "5 years" = fmt_eps(sapply(names(crop_labels), eps_model, yrs = 5)),
     "10 years" = fmt_eps(sapply(names(crop_labels), eps_model, yrs = 10)),
@@ -503,7 +507,7 @@ cropland_share <- veg_1pct$extra_mt / veg_1pct$extra_mt_upper
 veg_max <- supply_at("vegetable_oil", max(model_supply$pct_change))
 ```
 
-The model's one-year supply elasticity for vegetable oil is `r fmt_eps(eps_model("vegetable_oil"))`, about `r fmt0(signif(0.10 / eps_model("vegetable_oil"), 1))` times smaller than Roberts & Schlenker's 0.10. Four things keep it small:
+The model's one-year supply elasticity for vegetable oil is `r fmt_eps(eps_model("vegetable_oil"))`. To see where that comes from: a 1% rise in the vegetable-oil price adds `r fmt0(veg_1pct$extra_palm_oil_t)` t of palm oil and `r fmt0(veg_1pct$extra_soybeans_t)` t of soybeans (`r fmt0(soy_oil_per_bean * veg_1pct$extra_soybeans_t)` t of oil) in the first year. That is `r fmt0(veg_1pct$extra_palm_oil_t + soy_oil_per_bean * veg_1pct$extra_soybeans_t)` t of vegetable oil, or `r formatC(100 * (veg_1pct$extra_palm_oil_t + soy_oil_per_bean * veg_1pct$extra_soybeans_t) / (q0_mt * 1e6), digits = 2, format = "fg")`% of the `r fmt0(q0_mt)` Mt world market, about `r fmt0(signif(0.10 / eps_model("vegetable_oil"), 1))` times less than Roberts & Schlenker's 0.10 would give. Four things keep it small:
 
 - A 1% rise in vegetable-oil prices clears only `r fmt0(veg_1pct$extra_forest_loss_ha)` ha more forest in the first year, against `r fmt1(bau_year1_ha / 1e6)` Mha cleared under BAU.
 - The model counts about `r fmt0(100 * cropland_share)`% of that extra clearing as cropland, and only the palm and soybean share of each cell's crop mix as palm and soybeans. Even counting every extra hectare as cropland would only raise the elasticity to `r fmt_eps(eps_model("vegetable_oil", col = "eps_upper"))`.
