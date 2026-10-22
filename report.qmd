@@ -159,7 +159,7 @@ With those prices, emLab's land-use model clears an extra `r fmt1(gl("vo_central
 
 Spread over `r headline_years` years of fuel use, the additional forest carbon loss comes to `r fmt1(il("vo_central", 25))` g CO₂ per MJ of VO-RD (`r fmt1(il("vo_central", 20))` over 20 years, `r fmt1(il("vo_central", 30))` over 30), or `r fmt1(il("vo_high", 25))` with the Roberts & Schlenker shock. Added to VO-RD's direct `r vord_direct_ci` g CO₂e/MJ [@seber2025, p. 6], the central value gives `r fmt1(vord_direct_ci + il("vo_central", 25))` g/MJ, `r ifelse(vord_direct_ci + il("vo_central", 25) < fossil_baseline_ci, "below", "above")` the `r fossil_baseline_ci` fossil baseline; the sensitivity value gives `r fmt1(vord_direct_ci + il("vo_high", 25))`, `r ifelse(vord_direct_ci + il("vo_high", 25) < fossil_baseline_ci, "below", "above")` it.
 
-Our central estimate is well below the 62 g CO₂e/MJ ICCT has used [@sturrup2026, p. 10] and the 84.1 g CO₂e/MJ that @chen2026 [Table 1, p. 13] estimate for palm. One reason is that we count only carbon in forest biomass: peat alone was 614 of the 1,086 Tg CO₂e in Chen et al.'s estimate [@chen2026, Table 1, p. 13].
+Our central ILUC value of `r fmt1(il("vo_central", 25))` g/MJ is well below the 62 g CO₂e/MJ ICCT has used [@sturrup2026, p. 10] and the 84.1 g CO₂e/MJ that @chen2026 [Table 1, p. 13] estimate for palm. Both of those are ILUC alone, like ours, and leave out the fuel's direct emissions. So ICCT's 62 compares with our `r fmt1(il("vo_central", 25))`, not with our total of `r fmt1(vord_direct_ci + il("vo_central", 25))`; adding VO-RD's direct `r vord_direct_ci` to ICCT's 62 gives a total of `r fmt1(vord_direct_ci + 62)`. One reason our ILUC value is lower is that we count only carbon in forest biomass: peat alone was 614 of the 1,086 Tg CO₂e in Chen et al.'s estimate [@chen2026, Table 1, p. 13].
 
 ## Background
 
@@ -277,7 +277,7 @@ Published ILUC estimates for vegetable-oil biofuels range widely:
 | @chen2026 [Table 1, p. 13] | Econometric estimates of demand → price → deforestation for palm, 2002–2018 | 84.1 g CO₂e/MJ (90% CI 48.7–113.5) |
 | GLOBIOM for the EU [@valin2015, p. x] | Global economic land-use model, emissions spread over 20 years | 231 g CO₂e/MJ for palm oil, 150 for soybean oil |
 
-: ICCT takes its 62 from the EPA model comparison [@sturrup2026, p. 10]. The only 62 in the EPA's results table is GCAM's land-use-change value, which is in kg CO₂e/MMBTU (≈ 59 g CO₂e/MJ), so we assume that is the source. With it, ICCT finds the ILUC-adjusted fleet GFI reaches 93.86 g CO₂e/MJ by 2035, above the fossil baseline [@sturrup2026, Table A1, p. 15].
+: ICCT takes its 62 from the EPA model comparison [@sturrup2026, p. 10]. The only 62 in the EPA's results table is GCAM's land-use-change value, which is in kg CO₂e/MMBTU (≈ 59 g CO₂e/MJ), so we assume that is the source. Every value in the table is ILUC alone and leaves out the fuel's direct life-cycle emissions. ICCT adds its 62, weighted by VO-RD's share of shipping energy (62 × 46% ≈ 28.5 g CO₂e/MJ in 2035), to the fleet's Base-target GFI [@sturrup2026, pp. 10–11], and finds the ILUC-adjusted fleet GFI reaches 93.86 g CO₂e/MJ by 2035, above the fossil baseline [@sturrup2026, Table A1, p. 15].
 
 Like Chen et al., we estimate how much the demand shift raises prices and then use an econometric land-use model to translate prices into forest loss, instead of assuming an ILUC factor.
 
@@ -794,7 +794,7 @@ knitr::kable(
 )
 ```
 
-Over the `r headline_years`-year headline period, the central ILUC estimate is `r fmt1(il("vo_central", 25))` g CO₂/MJ. The 30-year value, `r fmt1(il("vo_central", 30))`, is the one to set against the 62 g CO₂e/MJ ICCT has used, since that number comes from a 2020–2050 window. Our estimates are lower than both published benchmarks. Part of the gap is scope: we count only forest biomass carbon, while Chen et al. also count peat (614 of their 1,086 Tg CO₂e) and soil carbon [@chen2026, Table 1, p. 13].
+Over the `r headline_years`-year headline period, the central ILUC estimate is `r fmt1(il("vo_central", 25))` g CO₂/MJ. The 30-year value, `r fmt1(il("vo_central", 30))`, is the one to set against the 62 g CO₂e/MJ ICCT has used, since that number comes from a 2020–2050 window. Both benchmarks, ICCT's 62 and Chen et al.'s 84.1, are ILUC alone, so they compare with these values and not with the totals that include VO-RD's direct `r vord_direct_ci` g CO₂e/MJ. Our estimates are lower than both. Part of the gap is scope: we count only forest biomass carbon, while Chen et al. also count peat (614 of their 1,086 Tg CO₂e) and soil carbon [@chen2026, Table 1, p. 13].
 
 ```{r}
 #| label: iluc-country-chart
@@ -852,12 +852,7 @@ ggplot2::ggplot(iluc_plot, ggplot2::aes(g_per_mj, label)) +
 
 `r iluc_by_country$country[1]` and `r iluc_by_country$country[2]` contribute `r fmt1(sum(iluc_by_country$total[1:2]))` of the `r fmt1(sum(iluc_by_country$total))` g CO₂/MJ, and the palm price increase accounts for `r fmt0(100 * sum(iluc_by_country$palm) / sum(iluc_by_country$total))`% of the total.
 
-## Caveats and next steps
-
-Next steps:
-
-- Add peat and soil carbon, at least for Indonesia and Malaysia, so the ILUC estimate covers the same emissions as Chen et al.
-- Compare our copy of the model with upstream (snippet in `r/land_use_model/PROVENANCE.md`), which has been refactored since we copied it on 31 July 2026.
+## Caveats
 
 What the estimates leave out or assume:
 
