@@ -73,13 +73,19 @@ CP <- 0
 # onto the land-use model's crops".
 SOY_OIL_VALUE_SHARE <- 4.72 / (4.72 + 8.66)
 
-# Vegetable-oil price shocks (%) for 2035 from the price-shock analysis in report.qmd, both with
+# Vegetable-oil price shocks (%) for 2035 from the price-shock analysis in report.qmd, all with
 # Roberts & Schlenker's demand elasticity: rs uses their supply elasticity too; rs_model uses this
-# model's own one-year supply elasticity, from 00d_supply_curve.R.
+# model's own one-year supply elasticity, from 00d_supply_curve.R; rs_low and rs_high use the
+# supply and demand elasticities of their Table 1 specifications with the smallest and largest
+# multiplier.
 vo_shock_2035 <- readr::read_csv(here::here("data/derived/vegetable_oil_price_shock_2035.csv"),
                                  show_col_types = FALSE)
-stopifnot("Expected one 2035 row in vegetable_oil_price_shock_2035.csv" =
-            nrow(vo_shock_2035) == 1 && vo_shock_2035$year == 2035)
+stopifnot(
+  "Expected one 2035 row in vegetable_oil_price_shock_2035.csv" =
+    nrow(vo_shock_2035) == 1 && vo_shock_2035$year == 2035,
+  "vegetable_oil_price_shock_2035.csv lacks the low/high shocks; render report.qmd first" =
+    all(c("pct_delta_p_rs_low", "pct_delta_p_rs_high") %in% names(vo_shock_2035))
+)
 
 vo_scenario <- function(pct_oil) {
   c("Oil, palm" = pct_oil, "Soybeans" = SOY_OIL_VALUE_SHARE * pct_oil)
@@ -93,7 +99,10 @@ PRICE_SHOCKS <- list(
   # Crop attribution for the rs shock: each crop's price shocked alone. The deforestation
   # model is nonlinear, so palm-only + soy-only need not sum exactly to vo_rs.
   vo_rs_palm  = vo_scenario(vo_shock_2035$pct_delta_p_rs)["Oil, palm"],
-  vo_rs_soy   = vo_scenario(vo_shock_2035$pct_delta_p_rs)["Soybeans"]
+  vo_rs_soy   = vo_scenario(vo_shock_2035$pct_delta_p_rs)["Soybeans"],
+  # Sensitivity: the range of the rs shock across Roberts & Schlenker's specifications.
+  vo_rs_low   = vo_scenario(vo_shock_2035$pct_delta_p_rs_low),
+  vo_rs_high  = vo_scenario(vo_shock_2035$pct_delta_p_rs_high)
 )
 
 # Discount rate and social cost of carbon — shared across all three scripts via model_params.rds
