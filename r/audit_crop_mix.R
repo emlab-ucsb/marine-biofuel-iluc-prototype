@@ -4,7 +4,7 @@
 #################################
 #
 # Reads the land-use model's inputs (read-only, via r/land_use_model/paths.R) and this repo's model
-# run (land_use_model_runs/, from r/land_use_model/run_pipeline.R), and writes four small files to
+# run (land_use_model_runs/, from r/land_use_model/run_pipeline.R), and writes five small files to
 # data/derived/ for the report:
 # - crop_mix_grid.csv.gz: per 0.5-degree square, the palm and soybean shares of the crop mix the model
 #   uses (harvested_share_gaez, set per GAEZ zone) and of M3 harvested area in the same cells.
@@ -14,6 +14,8 @@
 #   loss in four well-known palm and soy frontiers.
 # - crop_mix_numbers.csv: headline counts, and the model's first-year response to a +1% palm price in
 #   Indonesia and Malaysia next to the response implied by Chen et al. (2026).
+# - model_demand_elasticities.csv: the demand elasticity per crop that the model's own price
+#   calculation (00c_run_cobweb.R) pairs with its supply from newly cleared forest.
 #
 # Nothing here changes the model; it only reads its inputs and outputs. Peak memory is about that of
 # 01_prepare_data.R.
@@ -191,6 +193,22 @@ numbers <- data.table::data.table(metric = c(
   supply_base[crop == "Oil, palm", supply_t], supply_base[crop == "Soybeans", supply_t]
 ))
 data.table::fwrite(numbers, file.path(derived, "crop_mix_numbers.csv"))
+
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+# The model's own demand elasticities -----
+# 00c_run_cobweb.R's apply_elasticity() divides each crop's supply shock from newly cleared forest by
+# its entry on the diagonal of elas_pivot to get the price shock, and stops if any off-diagonal entry
+# is non-zero.
+
+load(file.path(input_dir, "K_elas_pivot_full.Rdata"))
+elas <- data.table::as.data.table(elas_pivot)
+elas_crops <- as.character(elas$crop)
+elas_mat <- as.matrix(elas[, elas_crops, with = FALSE])
+stopifnot("elas_pivot is not diagonal" = all(elas_mat[row(elas_mat) != col(elas_mat)] == 0, na.rm = TRUE))
+demand_elas <- data.table::data.table(crop = elas_crops, elasticity = diag(elas_mat))
+data.table::fwrite(demand_elas, file.path(derived, "model_demand_elasticities.csv"))
+
 print(numbers)
+print(demand_elas)
 print(regions)
 print(countries[1:12])
