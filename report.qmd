@@ -11,6 +11,42 @@ format:
     theme: cosmo
     embed-resources: false
     fig-dpi: 150
+    # Figures and tables are cross-referenced (fig-/tbl- labels), so each has a link (report.html#fig-...).
+    # This moves each one's link icon from after the whole figure or table into its caption, where it
+    # shows on hover, and makes clicking any link icon (headings too) copy the full link.
+    include-after-body:
+      text: |
+        <style>
+          #link-copied { position: fixed; bottom: 1.5rem; left: 50%; transform: translateX(-50%); padding: 0.4rem 0.9rem; border-radius: 0.3rem; background: #212529; color: #fff; font-size: 0.875rem; opacity: 0; transition: opacity 0.2s; pointer-events: none; z-index: 2000; }
+          #link-copied.show { opacity: 1; }
+        </style>
+        <script>
+        window.addEventListener("load", () => {
+          document.querySelectorAll("div.quarto-float[id^='fig-'], div.quarto-float[id^='tbl-']").forEach((float) => {
+            const caption = float.querySelector("figcaption");
+            const link = float.querySelector(":scope > a.anchorjs-link");
+            if (caption && link) {
+              link.title = "Copy link";
+              caption.appendChild(link);
+            }
+          });
+        });
+        document.addEventListener("click", (event) => {
+          const link = event.target.closest("a.anchorjs-link");
+          if (!link || !navigator.clipboard) return;
+          navigator.clipboard.writeText(link.href).then(() => {
+            let toast = document.getElementById("link-copied");
+            if (!toast) {
+              toast = document.createElement("div");
+              toast.id = "link-copied";
+              toast.textContent = "Link copied";
+              document.body.appendChild(toast);
+            }
+            toast.classList.add("show");
+            setTimeout(() => toast.classList.remove("show"), 1500);
+          }, () => {});
+        });
+        </script>
 execute:
   message: false
   warning: false
@@ -80,7 +116,7 @@ mys <- gap_peaks[gap_peaks$country == "Malaysia", ]
 
 # ILUC carbon intensity: additional forest carbon loss after T years of fuel use, divided by T
 # years of VO-RD energy at the 2035 level. Annual VO-RD energy is ICCT's 2035 VO-RD share of
-# shipping energy (Table 1), saved by the scrape-icct-table-1 chunk below.
+# shipping energy (Table 1), saved by the tbl-icct-table-1 chunk below.
 icct_saved <- utils::read.csv(file.path("data", "derived", "icct_table_1.csv"))
 icct_2035 <- icct_saved[icct_saved$year == 2035, ]
 vord_mj_2035 <- icct_2035$vord_pct_energy_demand / 100 * icct_2035$shipping_energy_demand_ej * 1e12
@@ -217,7 +253,7 @@ The framework judges fuels on their direct life-cycle emissions only. The IMO's 
 ICCT's Table 1 gives the mix for each year from 2028 to 2035. We read it straight from the PDF; its last column, virgin vegetable-oil feedstock, is our demand shift.
 
 ```{r}
-#| label: scrape-icct-table-1
+#| label: tbl-icct-table-1
 
 pdf_path <- file.path(
   "data",
@@ -292,13 +328,15 @@ The direct carbon intensities behind the mix:
 | Soy FAME biodiesel | 35.7 |
 | Used-cooking-oil renewable diesel (UCO-RD) | 13.1 |
 
-: Direct life-cycle carbon intensities used by ICCT: 2008 baseline (p. 1); fossil LNG, 85.65 (p. 2); HFO, 92.78, soy VO-RD, soy FAME (35.74) and UCO-RD (p. 6) [@seber2025]. None include indirect land-use change.
+: Direct life-cycle carbon intensities used by ICCT: 2008 baseline (p. 1); fossil LNG, 85.65 (p. 2); HFO, 92.78, soy VO-RD, soy FAME (35.74) and UCO-RD (p. 6) [@seber2025]. None include indirect land-use change. {#tbl-direct-ci}
 
 ### Indirect land-use change
 
-Indirect land-use change (ILUC) happens when biofuel demand raises crop prices and the higher prices lead to forest being cleared for farmland elsewhere. Those emissions fall outside the fuel's own supply chain, so a fuel mix can meet the GFI targets on paper while adding emissions nobody counts. Our steps:
+Indirect land-use change (ILUC) happens when biofuel demand raises crop prices and the higher prices lead to forest being cleared for farmland elsewhere. Those emissions fall outside the fuel's own supply chain, so a fuel mix can meet the GFI targets on paper while adding emissions nobody counts. @fig-steps shows our steps.
 
 ```{mermaid}
+%%| label: fig-steps
+%%| fig-cap: "From the IMO Net-Zero Framework to an ILUC carbon intensity: the steps, and who supplies each."
 flowchart LR
   A["IMO Net-Zero Framework"] --> F["Marine VO-RD demand<br/><i>ICCT cost-optimization</i>"]
   F --> B["Virgin vegetable-oil demand<br/><i>1.22 kg oil per kg RD</i>"]
@@ -309,7 +347,7 @@ flowchart LR
 
 ICCT converts renewable diesel to oil at 1.22 kg of oil per kg of fuel [@seber2025, p. 3, note 9].
 
-Published ILUC estimates for vegetable-oil biofuels vary widely:
+Published ILUC estimates for vegetable-oil biofuels vary widely (@tbl-published-iluc).
 
 | Source | Approach | ILUC result |
 |---|---|---|
@@ -318,7 +356,7 @@ Published ILUC estimates for vegetable-oil biofuels vary widely:
 | @chen2026 [Table 1, p. 13] | Econometric estimates of demand → price → deforestation for palm, 2002–2018 | 84.1 g CO₂e/MJ (90% CI 48.7–113.5) |
 | GLOBIOM for the EU [@valin2015, p. x] | Global economic land-use model, emissions spread over 20 years | 231 g CO₂e/MJ for palm oil, 150 for soybean oil |
 
-: ICCT takes its 62 from the EPA model comparison [@sturrup2026, p. 10]. The only 62 in the EPA's results table is GCAM's land-use-change value, in kg CO₂e/MMBTU (≈ 59 g CO₂e/MJ), so we assume that is the source. Every value here is ILUC alone, without the fuel's direct emissions. ICCT adds its 62, weighted by VO-RD's share of shipping energy (62 × 46% ≈ 28.5 g CO₂e/MJ in 2035), to the fleet's Base-target GFI [@sturrup2026, pp. 10–11], which puts the ILUC-adjusted fleet GFI at 93.86 g CO₂e/MJ in 2035, above the fossil baseline [@sturrup2026, Table A1, p. 15].
+: ICCT takes its 62 from the EPA model comparison [@sturrup2026, p. 10]. The only 62 in the EPA's results table is GCAM's land-use-change value, in kg CO₂e/MMBTU (≈ 59 g CO₂e/MJ), so we assume that is the source. Every value here is ILUC alone, without the fuel's direct emissions. ICCT adds its 62, weighted by VO-RD's share of shipping energy (62 × 46% ≈ 28.5 g CO₂e/MJ in 2035), to the fleet's Base-target GFI [@sturrup2026, pp. 10–11], which puts the ILUC-adjusted fleet GFI at 93.86 g CO₂e/MJ in 2035, above the fossil baseline [@sturrup2026, Table A1, p. 15]. {#tbl-published-iluc}
 
 Like Chen et al., we estimate how much the demand shift raises prices and then use an econometric land-use model to turn prices into forest loss, rather than assume an ILUC factor.
 
@@ -351,12 +389,12 @@ where $D$ is marine virgin vegetable-oil demand and $Q_0$ is baseline world prod
 | Demand year | 2035 only | Our choice: the final year of the ICCT projection |
 | "Beyond marginal" flag | demand share > 25% | Our own cutoff for where the approximation gets unreliable (not from a source) |
 
-: Inputs to the price shock. The primary multiplier is $M \approx 6.7$; with the emLab model's supply elasticity, $M \approx 20$. Chen et al.'s elasticities would give $M \approx 2.5$.
+: Inputs to the price shock. The primary multiplier is $M \approx 6.7$; with the emLab model's supply elasticity, $M \approx 20$. Chen et al.'s elasticities would give $M \approx 2.5$. {#tbl-price-shock-inputs}
 
 $Q_0$ is world production of the four oils in 2024/25, summed across countries from USDA's PSD oilseeds data, downloaded on 31 July 2026 [@usdapsd]. USDA revises PSD continuously, so a later download may differ slightly.
 
 ```{r}
-#| label: psd-q0
+#| label: tbl-q0
 
 psd_zip_path <- file.path("data", "usda_psd_oilseeds", "psd_oilseeds_csv.zip")
 psd <- utils::read.csv(unz(psd_zip_path, "psd_oilseeds.csv"))
@@ -396,7 +434,7 @@ Notes on these choices:
 - The formula is a linear approximation, and marine demand is a large share of the market from about 2032, so the 2035 shock gives the scale of the effect, not its size. Roberts & Schlenker also note that, allowing for uncertainty in the elasticities, the expected multiplier is higher than the one from their central estimates [@roberts2013, p. 2280].
 - Roberts & Schlenker's supply elasticity is the output response to the price expected at planting, a year ahead. They argue it is not just a short-run lower bound, because farmers expect price changes to persist [@roberts2013, p. 2285]. Oil palm, by contrast, takes about four years to start fruiting [@chen2026, p. 4].
 - Crushing soybeans also yields meal, whose revenue relieves some of the pressure on oil prices. Roberts & Schlenker cut their price effect by a third when a third of the calories return as animal feed [@roberts2013, p. 2280]. We make no such adjustment, so on this count our shock is too high.
-- With each paper's own elasticities, the formula reproduces its headline price effect ([Results](#sec-results-price)).
+- With each paper's own elasticities, the formula reproduces its headline price effect (@tbl-price-shock-check).
 
 ### The emLab model's own supply elasticity {#sec-model-supply}
 
@@ -409,12 +447,13 @@ The price shock needs a single supply elasticity for the whole vegetable-oil mar
 3. We put both in tonnes of oil. Palm is already counted as oil; soybeans convert at 11 lb of oil per 60 lb bushel, or `r fmt0(100 * 11 / 60)`% [@janzen2025, Fig. 2]. Adding the two gives the extra vegetable oil.
 4. We divide that extra oil by world production of all four oils in 2024/25 [@usdapsd], $Q_0$ = `r fmt0(q0_mt)` Mt, and then by the 1% price change. Rapeseed and sunflower aren't in the model, so they add no supply, but they stay in $Q_0$ because the price formula uses the four-oil market.
 
-We average a 1% rise and a 1% fall, which gives the elasticity at today's prices. We also trace the whole curve, from −50% to +1,500%, and repeat the calculation 5, 10 and 25 years out. For comparison with Chen et al.'s crop-specific estimates, we also raise each crop's price on its own, and measure palm oil against world palm oil production and soybeans against world soybean production.
+We average a 1% rise and a 1% fall, which gives the elasticity at today's prices. We also trace the whole curve (@fig-model-supply-curve), from −50% to +1,500%, and repeat the calculation 5, 10 and 25 years out. For comparison with Chen et al.'s crop-specific estimates, we also raise each crop's price on its own, and measure palm oil against world palm oil production and soybeans against world soybean production.
 
 ```{r}
-#| label: model-supply-curve
+#| label: fig-model-supply-curve
 #| fig-width: 7.5
 #| fig-height: 4
+#| fig-cap: "Extra production on the extra forest the emLab model clears after a permanent price change, relative to BAU, 1 and 25 years after the change. Each panel changes a different price; vegetable oil counts palm oil plus the oil in the soybeans."
 
 # Extra palm oil and soybean production on the extra forest cleared after a permanent price
 # change, relative to BAU (r/land_use_model/00d_supply_curve.R), in each experiment's own
@@ -490,7 +529,7 @@ ggplot2::ggplot(curve_plot, ggplot2::aes(extra_mt, pct_change, colour = horizon,
 ```
 
 ```{r}
-#| label: model-supply-elasticity
+#| label: tbl-model-supply-elasticity
 
 fmt_eps <- function(x) formatC(x, digits = 2, format = "fg")
 knitr::kable(
@@ -529,7 +568,7 @@ cropland_share <- veg_1pct$extra_mt / veg_1pct$extra_mt_upper
 veg_max <- supply_at("vegetable_oil", max(model_supply$pct_change))
 ```
 
-The model's one-year supply elasticity for vegetable oil is `r fmt_eps(eps_model("vegetable_oil"))`. To see where that comes from: a 1% rise in the vegetable-oil price adds `r fmt0(veg_1pct$extra_palm_oil_t)` t of palm oil and `r fmt0(veg_1pct$extra_soybeans_t)` t of soybeans (`r fmt0(soy_oil_per_bean * veg_1pct$extra_soybeans_t)` t of oil) in the first year. That is `r fmt0(veg_1pct$extra_palm_oil_t + soy_oil_per_bean * veg_1pct$extra_soybeans_t)` t of vegetable oil, or `r formatC(100 * (veg_1pct$extra_palm_oil_t + soy_oil_per_bean * veg_1pct$extra_soybeans_t) / (q0_mt * 1e6), digits = 2, format = "fg")`% of the `r fmt0(q0_mt)` Mt world market, about `r fmt0(signif(0.10 / eps_model("vegetable_oil"), 1))` times less than Roberts & Schlenker's 0.10 would give. Four things keep it small:
+The model's one-year supply elasticity for vegetable oil is `r fmt_eps(eps_model("vegetable_oil"))` (@tbl-model-supply-elasticity). To see where that comes from: a 1% rise in the vegetable-oil price adds `r fmt0(veg_1pct$extra_palm_oil_t)` t of palm oil and `r fmt0(veg_1pct$extra_soybeans_t)` t of soybeans (`r fmt0(soy_oil_per_bean * veg_1pct$extra_soybeans_t)` t of oil) in the first year. That is `r fmt0(veg_1pct$extra_palm_oil_t + soy_oil_per_bean * veg_1pct$extra_soybeans_t)` t of vegetable oil, or `r formatC(100 * (veg_1pct$extra_palm_oil_t + soy_oil_per_bean * veg_1pct$extra_soybeans_t) / (q0_mt * 1e6), digits = 2, format = "fg")`% of the `r fmt0(q0_mt)` Mt world market, about `r fmt0(signif(0.10 / eps_model("vegetable_oil"), 1))` times less than Roberts & Schlenker's 0.10 would give. Four things keep it small:
 
 - A 1% rise in vegetable-oil prices clears only `r fmt0(veg_1pct$extra_forest_loss_ha)` ha more forest in the first year, against `r fmt1(bau_year1_ha / 1e6)` Mha cleared under BAU.
 - The model counts about `r fmt0(100 * cropland_share)`% of that extra clearing as cropland, and only the palm and soybean share of each cell's crop mix as palm and soybeans. Even counting every extra hectare as cropland would only raise the elasticity to `r fmt_eps(eps_model("vegetable_oil", col = "eps_upper"))`.
@@ -553,7 +592,7 @@ Only two of the model's 17 crops produce vegetable oil: palm, priced per tonne o
 | Soybeans | $s \times \%\Delta P$, with $s = 0.353$ | Oil is only part of a soybean's value, and we hold the meal price fixed. $s = \$4.72 / (\$4.72 + \$8.66)$, from the 2007–2025 average per-bushel values of soybean oil and meal | @janzen2025 [Fig. 2] (USDA AMS Illinois plant prices; 11 lb oil and 48 lb meal per bushel) |
 | Rapeseed/canola, sunflower | not modeled | Not among the model's crops | — |
 
-: How the oil-price shock enters the emLab model.
+: How the oil-price shock enters the emLab model. {#tbl-crop-mapping}
 
 Two checks on $s$: Irwin's 2007–2017 averages (\$4.43 oil, \$8.33 meal) give 0.347 [@irwin2017, Fig. 3], and World Bank 2020 prices (\$838/t oil, \$394/t meal) give 0.33 [@worldbank2022pink, p. 1]. The share swings week to week: between 25% and 35% over 2013–2020, rarely below 35% since, and briefly 50% in 2021 and 2025 [@janzen2025, Fig. 3]. It is an accounting share, not an estimate of how soybean prices respond.
 
@@ -590,9 +629,9 @@ The result counts only CO₂ from forest biomass. We split it by country using e
 ### Vegetable-oil price shock {#sec-results-price}
 
 ```{r}
-#| label: price-shock-parameters
+#| label: tbl-price-shock-check
 
-# Q0 (psd-q0 chunk) in billion liters at 0.92 kg/L, ICCT's own soy-oil conversion
+# Q0 (tbl-q0 chunk) in billion liters at 0.92 kg/L, ICCT's own soy-oil conversion
 # (12.4 Mt = 13.5 billion L, ICCT Table A1).
 oil_density_kg_l <- 0.92
 q0_billion_liters <- q0_mt / oil_density_kg_l # ~221 billion L
@@ -602,7 +641,7 @@ eps_s_rs <- 0.10
 eps_d_rs <- -0.05
 
 # Alternative: the same demand elasticity with the land-use model's own one-year supply
-# elasticity for vegetable oil (model-supply-curve chunk).
+# elasticity for vegetable oil (fig-model-supply-curve chunk).
 eps_s_model <- eps_model("vegetable_oil")
 
 # For comparison only, not run through the land-use model: Chen et al. (2026). Demand: flexibility
@@ -646,7 +685,7 @@ knitr::kable(
 ```
 
 ```{r}
-#| label: derive-price-shock
+#| label: tbl-price-shock
 
 # %ΔP_t = (D_t / Q0) * M, expressed as a percent. beyond_marginal flags years where the shift
 # exceeds 25% of the market, outside the regime where the approximation is reliable.
@@ -677,9 +716,10 @@ knitr::kable(
 ```
 
 ```{r}
-#| label: price-shock-timeseries
+#| label: fig-price-shock
 #| fig-width: 7.5
 #| fig-height: 4
+#| fig-cap: "The price shock implied by each year's marine vegetable-oil demand, in both scenarios. The land-use runs use the 2035 values."
 
 price_shock_long <- rbind(
   data.frame(year = price_shock$year, scenario = "rs", pct = price_shock$pct_delta_p_rs),
@@ -702,9 +742,10 @@ ggplot2::ggplot(price_shock_long, ggplot2::aes(year, pct, colour = scenario, fil
 ```
 
 ```{r}
-#| label: model-supply-demand
+#| label: fig-market-2035
 #| fig-width: 7.5
 #| fig-height: 5
+#| fig-cap: "Roberts & Schlenker's demand curve before and after 2035 marine demand, with their supply curve and the emLab model's simulated one-year supply curve. The points mark the two price shocks run through the model."
 
 # The vegetable-oil market in 2035: Roberts & Schlenker demand (eps_d = -0.05) before and after
 # ICCT's marine demand D, against Roberts & Schlenker's supply (eps_s = 0.10) and the land-use
@@ -775,7 +816,7 @@ ggplot2::ggplot(market_curves, ggplot2::aes(q, p, colour = curve, linetype = cur
   theme_report()
 ```
 
-The figure shows the 2035 market: Roberts & Schlenker's demand curve before and after ICCT's `r fmt0(d_mt)` Mt of marine demand, and both supply curves. With Roberts & Schlenker's supply elasticity, prices rise `r fmt0(shock_rs)`%. The model's supply curve is nearly vertical, so other buyers have to give up almost all of the new demand. That takes a rise of `r fmt0(shock_model)`%, a multiplier of `r fmt1(m_model)`, close to the demand-only limit of $1/|\varepsilon_d| = 20$. (The simulated curve itself crosses demand at `r fmt0(p_cross_model)`%, so using the elasticity at baseline prices barely matters.) Neither number is a forecast: the shift is far outside the linear formula's range, and with elasticities this small the answer depends mostly on the shape assumed for the curves. Chen et al.'s elasticities would give `r fmt0(price_shock$demand_share_pct[price_shock$year == 2035] * m_chen)`% ($M \approx$ `r fmt1(m_chen)`). The model's supply paired with the model's own demand elasticity for palm (`r fmt_el(eps_d_model[["Oil, palm"]])`), as its price calculation pairs them, would give `r fmt0(pct_delta_p_model_own)`% ([Appendix C](#sec-model-demand)).
+@fig-market-2035 shows the 2035 market: Roberts & Schlenker's demand curve before and after ICCT's `r fmt0(d_mt)` Mt of marine demand, and both supply curves. With Roberts & Schlenker's supply elasticity, prices rise `r fmt0(shock_rs)`%. The model's supply curve is nearly vertical, so other buyers have to give up almost all of the new demand. That takes a rise of `r fmt0(shock_model)`%, a multiplier of `r fmt1(m_model)`, close to the demand-only limit of $1/|\varepsilon_d| = 20$. (The simulated curve itself crosses demand at `r fmt0(p_cross_model)`%, so using the elasticity at baseline prices barely matters.) Neither number is a forecast: the shift is far outside the linear formula's range, and with elasticities this small the answer depends mostly on the shape assumed for the curves. Chen et al.'s elasticities would give `r fmt0(price_shock$demand_share_pct[price_shock$year == 2035] * m_chen)`% ($M \approx$ `r fmt1(m_chen)`). The model's supply paired with the model's own demand elasticity for palm (`r fmt_el(eps_d_model[["Oil, palm"]])`), as its price calculation pairs them, would give `r fmt0(pct_delta_p_model_own)`% ([Appendix C](#sec-model-demand)).
 
 The land-use runs use the 2035 values.
 
@@ -827,7 +868,7 @@ cat(sprintf(
 Extra loss is the difference in forest between the BAU run and a shocked run. It is cumulative, so the last model year gives the total over the whole simulation.
 
 ```{r}
-#| label: forest-loss-global
+#| label: tbl-forest-loss-global
 
 horizons <- c(2035, 2050, final_year)
 global_table <- global_loss |>
@@ -855,9 +896,10 @@ knitr::kable(
 ```
 
 ```{r}
-#| label: forest-loss-timeseries
+#| label: fig-forest-loss-timeseries
 #| fig-width: 7.5
 #| fig-height: 4
+#| fig-cap: "Cumulative additional forest carbon loss relative to BAU in both scenarios, over the full run."
 
 global_ts <- global_loss |>
   dplyr::filter(scenario %in% c("vo_rs", "vo_rs_model")) |>
@@ -884,10 +926,10 @@ About half of the full-run loss happens in the first 15 years (`r fmt0(100 * gl(
 
 #### Check: does the cleared land supply the oil? {#sec-results-check}
 
-The price shock and the emLab model only fit together if the land the model clears grows roughly the extra oil the shock assumes. The table compares the two and converts the oil into the supply elasticity the model actually delivers.
+The price shock and the emLab model only fit together if the land the model clears grows roughly the extra oil the shock assumes. @tbl-land-oil-check compares the two and converts the oil into the supply elasticity the model actually delivers.
 
 ```{r}
-#| label: land-oil-check
+#| label: tbl-land-oil-check
 
 # Extra palm and soybean oil grown on the extra land each scenario clears (01_prepare_data.R's
 # per-pixel crop output, totalled by 03_summarise_results.R), against the extra oil supply its
@@ -944,7 +986,7 @@ The gap has two readings. Either the cleared land grows far more oil than the mo
 #### Where the loss falls
 
 ```{r}
-#| label: forest-loss-grid-map
+#| label: fig-forest-loss-grid-map
 #| column: body-outset
 #| fig-width: 10
 #| fig-height: 5.2
@@ -975,7 +1017,7 @@ ggplot2::ggplot() +
 ```
 
 ```{r}
-#| label: forest-loss-country-map
+#| label: fig-forest-loss-country-map
 #| column: body-outset
 #| fig-width: 10
 #| fig-height: 5.2
@@ -1017,9 +1059,10 @@ ggplot2::ggplot(mapping = ggplot2::aes(lon, lat, group = piece, subgroup = ring)
 To split the loss by crop, we ran the primary shock on palm alone and on soybeans alone. Palm accounts for `r fmt0(100 * crop_split[["palm"]] / sum(crop_split))`% of the extra loss and soybeans for `r fmt0(100 * crop_split[["soy"]] / sum(crop_split))`%. The two runs add up to the combined run to within `r formatC(abs(interaction_pct), format = "f", digits = 2)`%, so the interaction between them is negligible.
 
 ```{r}
-#| label: forest-loss-country-chart
+#| label: fig-forest-loss-by-crop
 #| fig-width: 7.5
 #| fig-height: 5.2
+#| fig-cap: "Cumulative additional forest carbon loss over the full horizon in the primary scenario, by country, split between the palm-only and soy-only runs."
 
 top_n <- 12
 top_countries <- rs_final$country[seq_len(top_n)]
@@ -1055,7 +1098,8 @@ ggplot2::ggplot(crop_by_country, ggplot2::aes(mt, label)) +
 ```
 
 ```{r}
-#| label: forest-loss-country-table
+#| label: tbl-forest-loss-country
+#| tbl-cap: "Cumulative additional forest loss relative to BAU over the full horizon, by country. Palm and soybean columns are the single-crop runs."
 
 country_table <- country_final |>
   dplyr::filter(carbon_loss > 0) |>
@@ -1092,7 +1136,6 @@ DT::datatable(
     "R&S: % of country's BAU forest",
     "emLab model: Mt CO₂"
   ),
-  caption = "Cumulative additional forest loss relative to BAU over the full horizon, by country. Palm and soybean columns are the single-crop runs.",
   options = list(pageLength = 10, scrollX = TRUE)
 ) |>
   DT::formatRound(c("carbon_mt", "palm_mt", "soy_mt", "area_kha", "share_pct", "pct_of_bau_area", "carbon_mt_high"), digits = 1)
@@ -1105,7 +1148,7 @@ Because cleared forest never grows back, BAU can later clear forest that a shock
 ### ILUC carbon intensity {#sec-results-iluc}
 
 ```{r}
-#| label: iluc-table
+#| label: tbl-iluc
 
 iluc_wide <- function(scn) iluc[iluc$scenario == scn, ]
 knitr::kable(
@@ -1131,9 +1174,10 @@ knitr::kable(
 Over the `r headline_years`-year headline period, ILUC is `r fmt1(il("vo_rs", 25))` g CO₂/MJ in the primary scenario and `r fmt1(il("vo_rs_model", 25))` in the emLab-model scenario. The 30-year values, `r fmt1(il("vo_rs", 30))` and `r fmt1(il("vo_rs_model", 30))`, are the ones to set against ICCT's 62 g CO₂e/MJ, which comes from a 2020–2050 window. Both benchmarks, ICCT's 62 and Chen et al.'s 84.1, are ILUC alone, so they compare with these values rather than with totals that include VO-RD's direct `r vord_direct_ci` g CO₂e/MJ. Ours count only forest biomass carbon, so they leave out the 47.5 g CO₂e/MJ Chen et al. add for peat and the 7.3 for non-peat soil. Their biomass carbon alone comes to `r chen_biomass_iluc`, before a credit of −29.4 for the carbon the new palms take up [@chen2026, Table 1, p. 13].
 
 ```{r}
-#| label: iluc-country-chart
+#| label: fig-iluc-by-country
 #| fig-width: 7.5
 #| fig-height: 5
+#| fig-cap: !expr paste0("Each country's contribution to the primary scenario's ", headline_years, "-year ILUC value, split between the palm-only and soy-only runs.")
 
 # Contributions to the headline ILUC estimate: each country's additional loss after
 # headline_years years in the palm-only and soy-only runs, in g CO2 per MJ of VO-RD.
@@ -1280,7 +1324,7 @@ Every change we made to emLab's land-use model to run the price scenarios, for t
 The first run the model's authors asked for: palm and soybean prices both up 20% (soybeans by the full 20%, without the oil-share adjustment), at a zero carbon price and otherwise as in [Methods](#sec-land-use-model). It tests how the model responds; it is not a policy scenario.
 
 ```{r}
-#| label: test-run-global
+#| label: tbl-test-run-global
 
 test_global <- lum |>
   dplyr::filter(scenario %in% c("bau", "vo_20pct")) |>
@@ -1316,7 +1360,7 @@ knitr::kable(
 BAU loses `r fmt1(bau_loss[1] / 1e9)` Gt CO₂ of forest carbon in the first year, close to the ~4.2 Gt noted in a comment in upstream's `01_prepare_data.R` (Section 5). The 20% increase adds `r fmt1(100 * extra_loss[2] / bau_loss[2])`% to BAU's cumulative loss over 15 years. The share shrinks over longer horizons because BAU loss keeps accumulating while the extra loss levels off.
 
 ```{r}
-#| label: test-run-countries
+#| label: tbl-test-run-countries
 
 test_countries <- lum |>
   dplyr::filter(scenario %in% c("bau", "vo_20pct"), year %in% c(2035, final_year)) |>
@@ -1369,12 +1413,12 @@ im_model_ha_per_cell_per_1000 <- (cm("im_model_extra_clearing_ha") / cm("im_cell
 ### The crop mix
 
 - **The crop mix is set per zone.** Each cell's revenue (`update_revenues()`) and crop production (`endog_prices()`) weight crops by `harvested_share_gaez`. That share is the same for every cell with the same `gaez` value (`r fmt0(cm("gaez_zones"))` values, such as `54_Europe`). We assume this gives forest cells, which have little cropland of their own, the crop mix of the wider area.
-- **For palm and soybeans, that mix differs a lot from the frontiers' own.** We look at four frontiers where palm or soybeans already make up much of the cropland: Riau, a province in central Sumatra, Indonesia, and Sabah and Sarawak, the Malaysian states on Borneo, for palm; and Mato Grosso, Brazil, and the Paraguayan Chaco for soybeans. For each crop's actual share of a cell's cropland we use the inputs' `m3_harvested_area_ha` column. We assume it comes from M3 [@monfreda2008], a global map of harvested area and yield for 175 crops around 2000, on a grid of about 10 km. In Riau, palm is `r pct(cm_regions$palm_share_m3[1])` of M3 harvested area but `r pct(cm_regions$palm_share_median[1])` of the model's crop mix, and no cell anywhere gets more than `r pct(cm("palm_share_max"))`. Palm is also more than 5% of the crop mix in `r fmt0(cm_countries$cells_palm_over_5pct[cm_countries$country == "Democratic Republic of the Congo"])` cells in the Democratic Republic of the Congo (table and map below).
-- **So, as we use the model, palm responds little to its own price.** In Indonesia and Malaysia, a 1% palm price rise produces `r fmt0(im_chen_palm_t / cm("im_model_extra_palm_t"))` times less palm oil from forest in the first year than Chen et al.'s econometric estimate implies [@chen2026, p. 5]. The model responds at least as strongly to revenue: about `r fmt0(im_model_ha_per_cell_per_1000)` ha cleared per cell per \$1,000/ha, against Chen et al.'s 9.3. The gap comes from palm's small share of revenue and of the cleared land.
+- **For palm and soybeans, that mix differs a lot from the frontiers' own.** We look at four frontiers where palm or soybeans already make up much of the cropland: Riau, a province in central Sumatra, Indonesia, and Sabah and Sarawak, the Malaysian states on Borneo, for palm; and Mato Grosso, Brazil, and the Paraguayan Chaco for soybeans. For each crop's actual share of a cell's cropland we use the inputs' `m3_harvested_area_ha` column. We assume it comes from M3 [@monfreda2008], a global map of harvested area and yield for 175 crops around 2000, on a grid of about 10 km. In Riau, palm is `r pct(cm_regions$palm_share_m3[1])` of M3 harvested area but `r pct(cm_regions$palm_share_median[1])` of the model's crop mix, and no cell anywhere gets more than `r pct(cm("palm_share_max"))` (@tbl-crop-mix-frontiers). Palm is also more than 5% of the crop mix in `r fmt0(cm_countries$cells_palm_over_5pct[cm_countries$country == "Democratic Republic of the Congo"])` cells in the Democratic Republic of the Congo (@fig-crop-mix-map).
+- **So, as we use the model, palm responds little to its own price.** In Indonesia and Malaysia (@tbl-crop-mix-response), a 1% palm price rise produces `r fmt0(im_chen_palm_t / cm("im_model_extra_palm_t"))` times less palm oil from forest in the first year than Chen et al.'s econometric estimate implies [@chen2026, p. 5]. The model responds at least as strongly to revenue: about `r fmt0(im_model_ha_per_cell_per_1000)` ha cleared per cell per \$1,000/ha, against Chen et al.'s 9.3. The gap comes from palm's small share of revenue and of the cleared land.
 - **This drives two of our results.** It is the main reason the supply elasticity we read off the model is tiny (`r fmt_eps(eps_model("vegetable_oil"))`, against Roberts & Schlenker's 0.10). It also probably explains why the Democratic Republic of the Congo has the most additional loss in our results.
 
 ```{r}
-#| label: crop-mix-regions
+#| label: tbl-crop-mix-frontiers
 
 frontier_crop <- c("Palm", "Palm", "Soybeans", "Soybeans")
 knitr::kable(
@@ -1391,6 +1435,10 @@ knitr::kable(
     "M3: the crop's share of all 17 crops' M3 harvested area (m3_harvested_area_ha) in the same cells."
   )
 )
+```
+
+```{r}
+#| label: tbl-crop-mix-response
 
 knitr::kable(
   data.frame(
@@ -1410,7 +1458,7 @@ knitr::kable(
 ```
 
 ```{r}
-#| label: crop-mix-map
+#| label: fig-crop-mix-map
 #| column: body-outset
 #| fig-width: 10
 #| fig-height: 8.6
@@ -1456,10 +1504,10 @@ Cleared forest is one source of supply among several. Even Chen et al.'s forest-
 
 The model's own price calculation pairs this forest-only supply with fairly responsive demand. `00c_run_cobweb.R`, which sets the model's equilibrium prices under carbon pricing, turns each crop's change in production from forest into a price change by dividing it by the crop's entry in `K_elas_pivot_full.Rdata`: `r fmt_el(eps_d_model[["Oil, palm"]])` for palm and `r fmt_el(eps_d_model[["Soybeans"]])` for soybeans. We read these as demand elasticities.
 
-The emLab-model scenario pairs it with Roberts & Schlenker's `r fmt_el(eps_d_rs)` instead. They estimated that alongside a supply elasticity of 0.10, which does most of the adjusting in their market. With the model's supply, almost nothing absorbs the ships' demand, so the price rises until other buyers give up nearly all of it.
+The emLab-model scenario pairs it with Roberts & Schlenker's `r fmt_el(eps_d_rs)` instead. They estimated that alongside a supply elasticity of 0.10, which does most of the adjusting in their market. With the model's supply, almost nothing absorbs the ships' demand, so the price rises until other buyers give up nearly all of it. @tbl-model-demand-pairings shows the price shock under each pairing.
 
 ```{r}
-#| label: model-demand-pairings
+#| label: tbl-model-demand-pairings
 
 # 2035 price shock, %dP = (D / Q0) / (eps_s - eps_d), for each pairing of supply and demand elasticities.
 # Only the first two are run through the model. The third adds to the model's vegetable-oil supply the
@@ -1492,11 +1540,11 @@ knitr::kable(
     "The 2035 price shock under different pairings of supply and demand elasticities, from the formula in ",
     "[Methods](#sec-price-shock), with marine demand at ", fmt0(shock_2035$demand_share_pct), "% of the market. ",
     "emLab model demand: the diagonal of K_elas_pivot_full.Rdata. Third row: the model's vegetable-oil supply ",
-    "elasticity if its first-year palm response in Indonesia and Malaysia matched Chen et al.'s ([table above](#sec-crop-mix))."
+    "elasticity if its first-year palm response in Indonesia and Malaysia matched Chen et al.'s (@tbl-crop-mix-response)."
   )
 )
 
-# Extra forest cleared per 1% rise in vegetable-oil prices, 25 years after a given price change (model-supply-curve chunk).
+# Extra forest cleared per 1% rise in vegetable-oil prices, 25 years after a given price change (fig-model-supply-curve chunk).
 clearing_per_pct <- function(pct) with(supply_at("vegetable_oil", pct, 25), extra_forest_loss_ha / pct_change)
 ```
 
