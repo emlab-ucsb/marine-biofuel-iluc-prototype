@@ -151,7 +151,9 @@ im_iluc <- iluc_of(c("Indonesia", "Malaysia"))
 drc_iluc <- iluc_of("Democratic Republic of the Congo")
 
 # The emLab model's own demand elasticities (K_elas_pivot_full.Rdata, saved by r/audit_crop_mix.R). Its
-# price calculation (00c_run_cobweb.R) pairs them with its supply from newly cleared forest. The price
+# price calculation (00c_run_cobweb.R) pairs them with its supply from newly cleared forest. Upstream's
+# r/25_global_elasticities.Rmd takes them from Roberts & Schlenker (2013): Table 8, Panel B for maize,
+# rice, soybeans and wheat, and Table 7, Panel B ("other" crops) for the rest, palm included. The price
 # shock below pairs the model's supply with its demand elasticity for palm; it is not run through the model.
 model_demand <- utils::read.csv(file.path("data", "derived", "model_demand_elasticities.csv"))
 eps_d_model <- stats::setNames(model_demand$elasticity, model_demand$crop)
@@ -168,9 +170,11 @@ interaction_pct <- 100 * (gl("vo_rs", final_year, "carbon_loss") - sum(crop_spli
 
 fmt1 <- function(x) formatC(x, format = "f", digits = 1, big.mark = ",")
 fmt0 <- function(x) formatC(x, format = "f", digits = 0, big.mark = ",")
-# Elasticities: two decimals from 0.05 up, two significant digits below, with a true minus sign.
+# Elasticities: two significant digits and at least two decimals (0.10, −0.028, 0.00013), with a true
+# minus sign.
 fmt_el <- function(x) {
-  sub("^-", "−", ifelse(abs(x) >= 0.05, formatC(x, format = "f", digits = 2), formatC(x, digits = 2, format = "fg")))
+  s <- formatC(signif(x, 2), digits = 2, format = "fg")
+  sub("^-", "−", ifelse(grepl("^-?0\\.[0-9]$", s), paste0(s, "0"), s))
 }
 # Country names as they read mid-sentence ("the Democratic Republic of the Congo").
 the_country <- function(x) {
@@ -228,7 +232,7 @@ Three things matter most. The price shock that drives everything else comes from
 
 ICCT estimates that meeting the Net-Zero Framework's Base target at least cost takes about `r fmt0(shock_2035$vo_demand_billion_liters)` billion liters of virgin vegetable oil a year for marine renewable diesel (VO-RD) by 2035 [@seber2025, Table 1, p. 5]. That is `r fmt0(shock_2035$demand_share_pct)`% of current world production of palm, soybean, rapeseed and sunflower oil.
 
-Supply and demand elasticities measure how much production and consumption change when prices rise by 1%. With Roberts & Schlenker's widely used estimates for staple crops [@roberts2013, Table 1, p. 2279], our primary scenario, that demand raises vegetable-oil prices by `r fmt0(shock_2035$pct_delta_p_rs)`%. A second scenario, the emLab-model scenario, keeps their demand elasticity but uses the supply elasticity implied by emLab's land-use model (`r formatC(shock_2035$eps_s_model, digits = 2, format = "fg")`; see [Methods](#sec-model-supply)), the model we use to turn prices into forest loss. Prices then rise `r fmt0(shock_2035$pct_delta_p_rs_model)`%, because the model adds almost no new supply and other buyers must give up nearly all of the oil the ships use. That pairing overstates the shock: the model's own price calculation pairs its supply with much more responsive demand, which would give `r fmt0(pct_delta_p_model_own)`% ([Appendix C](#sec-model-demand)). Both shocks come from a linear approximation stretched far beyond its range, so we use them to size the model's inputs, not as price forecasts.
+Supply and demand elasticities measure how much production and consumption change when prices rise by 1%. With Roberts & Schlenker's widely used estimates for staple crops [@roberts2013, Table 1, p. 2279], our primary scenario, that demand raises vegetable-oil prices by `r fmt0(shock_2035$pct_delta_p_rs)`%. A second scenario, the emLab-model scenario, keeps their demand elasticity but uses the supply elasticity implied by emLab's land-use model (`r formatC(shock_2035$eps_s_model, digits = 2, format = "fg")`; see [Methods](#sec-model-supply)), the model we use to turn prices into forest loss. Prices then rise `r fmt0(shock_2035$pct_delta_p_rs_model)`%, because the model adds almost no new supply and other buyers must give up nearly all of the oil the ships use. That pairing overstates the shock. The model's own price calculation pairs its supply with crop-level demand elasticities from the same paper, which would give `r fmt0(pct_delta_p_model_own)`%, but those assume buyers can switch to crops whose prices haven't risen ([Appendix C](#sec-model-demand)). Both shocks come from a linear approximation stretched far beyond its range, so we use them to size the model's inputs, not as price forecasts.
 
 The emLab model prices palm as oil but soybeans as whole beans, and oil is about 35% of a crushed soybean's value [@janzen2025, Fig. 2]. Holding meal prices fixed, the primary scenario raises palm oil prices `r fmt0(shock_2035$pct_delta_p_rs)`% and soybean prices `r fmt0(soy_oil_value_share * shock_2035$pct_delta_p_rs)`%.
 
@@ -382,8 +386,8 @@ where $D$ is marine virgin vegetable-oil demand and $Q_0$ is baseline world prod
 | Marine virgin vegetable-oil demand, 2035 ($D$) | 139.3 billion L | ICCT [@seber2025, Table 1, p. 5] |
 | Baseline market ($Q_0$) | ≈ 204 Mt: world production of palm, soybean, rapeseed and sunflowerseed oil, 2024/25 | USDA Production, Supply and Distribution (PSD) database [@usdapsd] |
 | Oil density, to put $D$ and $Q_0$ in the same units | 0.92 kg/L | ICCT's own soy-oil conversion: 12.4 Mt = 13.5 billion L (0.919 kg/L) [@seber2025, Table A1, p. 7] |
-| Demand elasticity ($\varepsilon_d$) | −0.05 | @roberts2013 [Table 1, p. 2279] (range −0.03 to −0.07) |
-| Supply elasticity, primary ($\varepsilon_s$) | 0.10 | @roberts2013 [Table 1, p. 2279] (range 0.09–0.12) |
+| Demand elasticity ($\varepsilon_d$) | −0.05 | @roberts2013 [Table 1, p. 2279] (−0.028 to −0.066 across their six specifications) |
+| Supply elasticity, primary ($\varepsilon_s$) | 0.10 | @roberts2013 [Table 1, p. 2279] (0.087 to 0.116 across their six specifications) |
 | Supply elasticity, emLab-model scenario ($\varepsilon_s$) | `r formatC(shock_2035$eps_s_model, digits = 2, format = "fg")`: the emLab model's own one-year supply elasticity for vegetable oil | Our estimate ([below](#sec-model-supply)) |
 | Elasticities of Chen et al., for comparison only | $\varepsilon_s \approx 0.12$ (long-run 0.10 for palm and 0.13 for competing oil crops, weighted by production), $\varepsilon_d = -0.284$ (the inverse of their estimated demand flexibility, the price change per 1% change in quantity, of −3.523) | @chen2026 [Fig. 2B, rows 3–4, p. 4; Table S1, col. 3] |
 | Demand year | 2035 only | Our choice: the final year of the ICCT projection |
@@ -560,18 +564,23 @@ knitr::kable(
 #| label: model-supply-numbers
 #| include: false
 
-# Numbers for the text: first-year clearing under BAU and from a +1% vegetable-oil price change,
-# and the share of that extra clearing the model counts as cropland.
+# Numbers for the text: first-year clearing under BAU and from a +1% vegetable-oil price change.
 bau_year1_ha <- sum(bau$area_bau[bau$year == 2020]) - sum(bau$area_bau[bau$year == 2021])
 veg_1pct <- supply_at("vegetable_oil", 1)
-cropland_share <- veg_1pct$extra_mt / veg_1pct$extra_mt_upper
 veg_max <- supply_at("vegetable_oil", max(model_supply$pct_change))
+
+# Share of the extra forest the primary scenario clears that the model counts as cropland, by area
+# (def_for_ag_share; written by r/audit_crop_mix.R).
+cropland <- utils::read.csv(file.path("data", "derived", "crop_mix_cropland_share.csv"))
+cropland_pct <- function(scope, yrs) {
+  100 * cropland$cropland_share[cropland$scope == scope & cropland$weight == "vo_rs extra clearing" & cropland$years %in% yrs]
+}
 ```
 
 The model's one-year supply elasticity for vegetable oil is `r fmt_eps(eps_model("vegetable_oil"))` (@tbl-model-supply-elasticity). To see where that comes from: a 1% rise in the vegetable-oil price adds `r fmt0(veg_1pct$extra_palm_oil_t)` t of palm oil and `r fmt0(veg_1pct$extra_soybeans_t)` t of soybeans (`r fmt0(soy_oil_per_bean * veg_1pct$extra_soybeans_t)` t of oil) in the first year. That is `r fmt0(veg_1pct$extra_palm_oil_t + soy_oil_per_bean * veg_1pct$extra_soybeans_t)` t of vegetable oil, or `r formatC(100 * (veg_1pct$extra_palm_oil_t + soy_oil_per_bean * veg_1pct$extra_soybeans_t) / (q0_mt * 1e6), digits = 2, format = "fg")`% of the `r fmt0(q0_mt)` Mt world market, about `r fmt0(signif(0.10 / eps_model("vegetable_oil"), 1))` times less than Roberts & Schlenker's 0.10 would give. Four things keep it small:
 
 - A 1% rise in vegetable-oil prices clears only `r fmt0(veg_1pct$extra_forest_loss_ha)` ha more forest in the first year, against `r fmt1(bau_year1_ha / 1e6)` Mha cleared under BAU.
-- The model counts about `r fmt0(100 * cropland_share)`% of that extra clearing as cropland, and only the palm and soybean share of each cell's crop mix as palm and soybeans. Even counting every extra hectare as cropland would only raise the elasticity to `r fmt_eps(eps_model("vegetable_oil", col = "eps_upper"))`.
+- The model counts only part of the cleared forest as cropland: in each cell, the share of its 2000–2020 forest loss that became cropland or palm (`def_for_ag_share`). Weighted by area, that is `r fmt0(cropland_pct("All countries", 1))`% of the extra forest the primary scenario clears in its first year and `r fmt0(cropland_pct("All countries", 25))`% after 25 years: `r fmt0(cropland_pct("Indonesia", 25))`% in Indonesia and `r fmt0(cropland_pct("Malaysia", 25))`% in Malaysia, but `r fmt1(cropland_pct("Democratic Republic of the Congo", 25))`% in the Democratic Republic of the Congo. Of that cropland, only the palm and soybean share of each cell's crop mix counts as palm and soybeans. Even counting every extra hectare as cropland would only raise the elasticity to `r fmt_eps(eps_model("vegetable_oil", col = "eps_upper"))`.
 - New cropland on cleared forest is the model's only source of supply. Higher yields, expansion onto land that isn't forest, crop switching and the other oil crops are all outside it, while published elasticities include them.
 - Each cell gets the crop mix of its whole agro-ecological zone (from FAO's Global Agro-Ecological Zones, GAEZ), which suits a model built to price carbon against a cell's total revenue. For a shock to palm and soybeans alone, though, it caps palm at 17.5% of any cell's crop mix, even in Riau, a palm frontier in central Sumatra. In Indonesia and Malaysia, the palm supply from forest that this gives is about 100 times smaller than Chen et al.'s econometric estimate implies. This is probably the biggest factor, and it suggests that reading a crop supply elasticity off the model is not a use it was built for ([Appendix C](#sec-crop-mix)).
 
@@ -639,6 +648,18 @@ q0_billion_liters <- q0_mt / oil_density_kg_l # ~221 billion L
 # Primary: Roberts & Schlenker (2013) staple-food elasticities (Table 1), for supply and demand.
 eps_s_rs <- 0.10
 eps_d_rs <- -0.05
+
+# Sensitivity: their six specifications in Table 1 (p. 2279): instrumental variables and three-stage
+# least squares, each with 3, 4 and 5 spline knots. Each estimates supply and demand together, so the
+# range uses matched pairs: the specifications with the smallest and largest multiplier.
+rs_specs <- data.frame(
+  spec = c("IV, 3 knots", "IV, 4 knots", "IV, 5 knots", "3SLS, 3 knots", "3SLS, 4 knots", "3SLS, 5 knots"),
+  eps_s = c(0.102, 0.096, 0.087, 0.116, 0.112, 0.097),
+  eps_d = c(-0.028, -0.055, -0.054, -0.034, -0.062, -0.066)
+)
+rs_specs$m <- 1 / (rs_specs$eps_s - rs_specs$eps_d)
+rs_low <- rs_specs[which.min(rs_specs$m), ]
+rs_high <- rs_specs[which.max(rs_specs$m), ]
 
 # Alternative: the same demand elasticity with the land-use model's own one-year supply
 # elasticity for vegetable oil (fig-model-supply-curve chunk).
@@ -816,7 +837,7 @@ ggplot2::ggplot(market_curves, ggplot2::aes(q, p, colour = curve, linetype = cur
   theme_report()
 ```
 
-@fig-market-2035 shows the 2035 market: Roberts & Schlenker's demand curve before and after ICCT's `r fmt0(d_mt)` Mt of marine demand, and both supply curves. With Roberts & Schlenker's supply elasticity, prices rise `r fmt0(shock_rs)`%. The model's supply curve is nearly vertical, so other buyers have to give up almost all of the new demand. That takes a rise of `r fmt0(shock_model)`%, a multiplier of `r fmt1(m_model)`, close to the demand-only limit of $1/|\varepsilon_d| = 20$. (The simulated curve itself crosses demand at `r fmt0(p_cross_model)`%, so using the elasticity at baseline prices barely matters.) Neither number is a forecast: the shift is far outside the linear formula's range, and with elasticities this small the answer depends mostly on the shape assumed for the curves. Chen et al.'s elasticities would give `r fmt0(price_shock$demand_share_pct[price_shock$year == 2035] * m_chen)`% ($M \approx$ `r fmt1(m_chen)`). The model's supply paired with the model's own demand elasticity for palm (`r fmt_el(eps_d_model[["Oil, palm"]])`), as its price calculation pairs them, would give `r fmt0(pct_delta_p_model_own)`% ([Appendix C](#sec-model-demand)).
+@fig-market-2035 shows the 2035 market: Roberts & Schlenker's demand curve before and after ICCT's `r fmt0(d_mt)` Mt of marine demand, and both supply curves. With Roberts & Schlenker's supply elasticity, prices rise `r fmt0(shock_rs)`%. The model's supply curve is nearly vertical, so other buyers have to give up almost all of the new demand. That takes a rise of `r fmt0(shock_model)`%, a multiplier of `r fmt1(m_model)`, close to the demand-only limit of $1/|\varepsilon_d| = 20$. (The simulated curve itself crosses demand at `r fmt0(p_cross_model)`%, so using the elasticity at baseline prices barely matters.) Neither number is a forecast: the shift is far outside the linear formula's range, and with elasticities this small the answer depends mostly on the shape assumed for the curves. Across Roberts & Schlenker's six specifications, the multiplier runs from `r fmt1(rs_low$m)` to `r fmt1(rs_high$m)`, which would put the primary shock between `r fmt0(price_shock$demand_share_pct[price_shock$year == 2035] * rs_low$m)`% and `r fmt0(price_shock$demand_share_pct[price_shock$year == 2035] * rs_high$m)`% (@tbl-model-demand-pairings). Chen et al.'s elasticities would give `r fmt0(price_shock$demand_share_pct[price_shock$year == 2035] * m_chen)`% ($M \approx$ `r fmt1(m_chen)`). The model's supply paired with its own demand elasticity for palm (`r fmt_el(eps_d_model[["Oil, palm"]])`) would give `r fmt0(pct_delta_p_model_own)`%, but that elasticity assumes buyers can switch to crops whose prices haven't risen ([Appendix C](#sec-model-demand)).
 
 The land-use runs use the 2035 values.
 
@@ -1502,7 +1523,7 @@ The crop mix explains why the model's supply elasticity is small. The size of th
 
 Cleared forest is one source of supply among several. Even Chen et al.'s forest-to-palm response in Indonesia and Malaysia implies a first-year palm supply elasticity of only `r fmt_el(cm("im_chen_elasticity"))`, about a third of their long-run 0.10; the rest comes from other land, higher yields and other crops. So a crop mix closer to M3 would still leave the model's elasticity well below a market-wide one.
 
-The model's own price calculation pairs this forest-only supply with fairly responsive demand. `00c_run_cobweb.R`, which sets the model's equilibrium prices under carbon pricing, turns each crop's change in production from forest into a price change by dividing it by the crop's entry in `K_elas_pivot_full.Rdata`: `r fmt_el(eps_d_model[["Oil, palm"]])` for palm and `r fmt_el(eps_d_model[["Soybeans"]])` for soybeans. We read these as demand elasticities.
+The model's own price calculation pairs this forest-only supply with more responsive demand. `00c_run_cobweb.R`, which sets the model's equilibrium prices under carbon pricing, turns each crop's change in production from forest into a price change by dividing it by the crop's demand elasticity in `K_elas_pivot_full.Rdata`. Upstream's `r/25_global_elasticities.Rmd` takes these from Roberts & Schlenker too. Soybeans' `r fmt_el(eps_d_model[["Soybeans"]])` is its own-price elasticity in their four-crop demand system [@roberts2013, Table 8, Panel B, p. 2290]. Palm, like every crop outside their four staples, gets `r fmt_el(eps_d_model[["Oil, palm"]])`, the value for "other" crops (rice, soybeans and wheat together) in their two-crop system against maize [@roberts2013, Table 7, Panel B, p. 2288]. Each describes demand for one crop or group while the others' prices stay fixed, so buyers can switch between them. In our scenario all vegetable-oil prices rise together, so these probably overstate how much buyers cut back.
 
 The emLab-model scenario pairs it with Roberts & Schlenker's `r fmt_el(eps_d_rs)` instead. They estimated that alongside a supply elasticity of 0.10, which does most of the adjusting in their market. With the model's supply, almost nothing absorbs the ships' demand, so the price rises until other buyers give up nearly all of it. @tbl-model-demand-pairings shows the price shock under each pairing.
 
@@ -1510,37 +1531,44 @@ The emLab-model scenario pairs it with Roberts & Schlenker's `r fmt_el(eps_d_rs)
 #| label: tbl-model-demand-pairings
 
 # 2035 price shock, %dP = (D / Q0) / (eps_s - eps_d), for each pairing of supply and demand elasticities.
-# Only the first two are run through the model. The third adds to the model's vegetable-oil supply the
-# gap between Chen et al.'s implied and the model's first-year palm oil from forest in Indonesia and
-# Malaysia (crop-mix-data chunk).
+# Only the primary and emLab-model scenarios are run through the model. The fifth row adds to the
+# model's vegetable-oil supply the gap between Chen et al.'s implied and the model's first-year palm oil
+# from forest in Indonesia and Malaysia (crop-mix-data chunk).
 eps_s_chen_forest <- eps_s_model + (im_chen_palm_t - cm("im_model_extra_palm_t")) / (q0_mt * 1e6) / 0.01
 pairings <- data.frame(
-  supply = c(
-    "Roberts & Schlenker", "emLab model", "emLab model, with Chen et al.'s forest-to-palm response in Indonesia and Malaysia",
-    "emLab model", "emLab model", "Chen et al."
+  pairing = c(
+    "Roberts & Schlenker, central (primary scenario)",
+    paste0("Roberts & Schlenker, smallest multiplier (", rs_low$spec, ")"),
+    paste0("Roberts & Schlenker, largest multiplier (", rs_high$spec, ")"),
+    "emLab model supply, Roberts & Schlenker demand (emLab-model scenario)",
+    "As above, if the model's palm response in Indonesia and Malaysia matched Chen et al.'s",
+    "emLab model supply, emLab model demand for palm",
+    "Chen et al., for comparison"
   ),
-  eps_s = c(eps_s_rs, eps_s_model, eps_s_chen_forest, eps_s_model, eps_s_model, eps_s_chen),
-  demand = c("Roberts & Schlenker", "Roberts & Schlenker", "Roberts & Schlenker", "emLab model, palm", "emLab model, soybeans", "Chen et al."),
-  eps_d = c(eps_d_rs, eps_d_rs, eps_d_rs, eps_d_model[["Oil, palm"]], eps_d_model[["Soybeans"]], eps_d_chen),
-  run = c("Yes: primary scenario", "Yes: emLab-model scenario", "No", "No", "No", "No")
+  eps_s = c(eps_s_rs, rs_low$eps_s, rs_high$eps_s, eps_s_model, eps_s_chen_forest, eps_s_model, eps_s_chen),
+  eps_d = c(eps_d_rs, rs_low$eps_d, rs_high$eps_d, eps_d_rs, eps_d_rs, eps_d_model[["Oil, palm"]], eps_d_chen),
+  run = c("Yes", "No", "No", "Yes", "No", "No", "No")
 )
 pairings$shock <- shock_2035$demand_share_pct / (pairings$eps_s - pairings$eps_d)
-stopifnot(isTRUE(all.equal(pairings$shock[1:2], c(shock_2035$pct_delta_p_rs, shock_2035$pct_delta_p_rs_model))))
+stopifnot(isTRUE(all.equal(pairings$shock[c(1, 4)], c(shock_2035$pct_delta_p_rs, shock_2035$pct_delta_p_rs_model))))
 
 knitr::kable(
   data.frame(
-    "Supply elasticity" = paste0(pairings$supply, ": ", fmt_el(pairings$eps_s)),
-    "Demand elasticity" = paste0(pairings$demand, ": ", fmt_el(pairings$eps_d)),
+    "Pairing" = pairings$pairing,
+    "Supply elasticity" = fmt_el(pairings$eps_s),
+    "Demand elasticity" = fmt_el(pairings$eps_d),
     "Price shock, 2035" = paste0(fmt0(pairings$shock), "%"),
     "Run through the model" = pairings$run,
     check.names = FALSE
   ),
-  align = "llrl",
+  align = "lrrrl",
   caption = paste0(
     "The 2035 price shock under different pairings of supply and demand elasticities, from the formula in ",
     "[Methods](#sec-price-shock), with marine demand at ", fmt0(shock_2035$demand_share_pct), "% of the market. ",
-    "emLab model demand: the diagonal of K_elas_pivot_full.Rdata. Third row: the model's vegetable-oil supply ",
-    "elasticity if its first-year palm response in Indonesia and Malaysia matched Chen et al.'s (@tbl-crop-mix-response)."
+    "Roberts & Schlenker's specifications are the six in their Table 1 [@roberts2013, p. 2279]; each estimates ",
+    "supply and demand together. emLab model demand: K_elas_pivot_full.Rdata. Fifth row: the model's ",
+    "vegetable-oil supply elasticity if its first-year palm response in Indonesia and Malaysia matched ",
+    "Chen et al.'s (@tbl-crop-mix-response)."
   )
 )
 
@@ -1548,7 +1576,7 @@ knitr::kable(
 clearing_per_pct <- function(pct) with(supply_at("vegetable_oil", pct, 25), extra_forest_loss_ha / pct_change)
 ```
 
-Changing the crop mix alone would barely move the shock. Pairing the model's supply with its own demand elasticities would bring it close to Chen et al.'s.
+Changing the crop mix alone would barely move the shock. Pairing the model's supply with its own demand elasticity for palm would bring it close to Chen et al.'s, but for the reason above that is probably a low end. Roberts & Schlenker's own specifications put it between `r fmt0(pairings$shock[2])`% and `r fmt0(pairings$shock[3])`%.
 
 Two more points bear on how we read the results. By the model's own accounting, the land cleared in the primary scenario grows only `r fmt1(100 * ck("vo_rs", 25, "oil_mt") / ck("vo_rs", 25, "assumed_mt"))`% of the extra oil the price shock assumes after 25 years ([check](#sec-results-check)), yet we count all of that clearing as ILUC. And the primary shock puts palm at `r fmt1(1 + shock_2035$pct_delta_p_rs / 100)` times its 2020 price. Over that range the model's response is close to proportional: over 25 years it clears `r fmt0(100 * (clearing_per_pct(400) / clearing_per_pct(1) - 1))`% more forest per 1% price rise at +400% than at +1%.
 
@@ -1563,8 +1591,8 @@ On the crop mix:
 
 On the price shock:
 
-3. Should the price shock take its supply and demand elasticities from one source? That could be Roberts & Schlenker's (0.10 and −0.05, our primary scenario), or the model's own, as its price calculation pairs them (`r fmt0(pct_delta_p_model_own)`% with palm's demand elasticity). With the first, we would drop the emLab-model scenario; with the second, we would rerun it with the model's demand elasticities.
-4. Are the entries in `K_elas_pivot_full.Rdata` demand elasticities, and where do they come from? Palm's `r fmt_el(eps_d_model[["Oil, palm"]])` is the same as for `r sum(eps_d_model == eps_d_model[["Oil, palm"]]) - 1` other crops in the file; is it a general value or one estimated for palm?
+3. We propose to take both elasticities from Roberts & Schlenker (0.10 and −0.05, our primary scenario), test the range across their six specifications (`r fmt0(pairings$shock[2])`–`r fmt0(pairings$shock[3])`%), and drop the emLab-model scenario. Does that sound right to you?
+4. We traced the demand elasticities in `K_elas_pivot_full.Rdata` to Roberts & Schlenker's Tables 7 and 8, with palm taking their value for "other" crops. Is that right, and do you agree that, for a shock that raises all vegetable-oil prices together, they would overstate how much buyers cut back?
 
 On reading the results:
 

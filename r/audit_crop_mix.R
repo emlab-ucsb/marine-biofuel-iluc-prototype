@@ -4,7 +4,7 @@
 #################################
 #
 # Reads the land-use model's inputs (read-only, via r/land_use_model/paths.R) and this repo's model
-# run (land_use_model_runs/, from r/land_use_model/run_pipeline.R), and writes five small files to
+# run (land_use_model_runs/, from r/land_use_model/run_pipeline.R), and writes six small files to
 # data/derived/ for the report:
 # - crop_mix_grid.csv.gz: per 0.5-degree square, the palm and soybean shares of the crop mix the model
 #   uses (harvested_share_gaez, set per GAEZ zone) and of M3 harvested area in the same cells.
@@ -16,6 +16,8 @@
 #   Indonesia and Malaysia next to the response implied by Chen et al. (2026).
 # - model_demand_elasticities.csv: the demand elasticity per crop that the model's own price
 #   calculation (00c_run_cobweb.R) pairs with its supply from newly cleared forest.
+# - crop_mix_cropland_share.csv: the share of forest loss the model counts as cropland
+#   (def_for_ag_share), weighted by 2000-2020 forest loss and by the primary scenario's extra clearing.
 #
 # Nothing here changes the model; it only reads its inputs and outputs. Peak memory is about that of
 # 01_prepare_data.R.
@@ -208,7 +210,48 @@ stopifnot("elas_pivot is not diagonal" = all(elas_mat[row(elas_mat) != col(elas_
 demand_elas <- data.table::data.table(crop = elas_crops, elasticity = diag(elas_mat))
 data.table::fwrite(demand_elas, file.path(derived, "model_demand_elasticities.csv"))
 
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+# Share of forest loss the model counts as cropland -----
+# def_for_ag_share (ag) is a cell's 2000-2020 forest loss that became cropland or palm, over its total
+# forest loss (upstream r/Kb_endogenous_price_preparation.R); endog_prices() counts only that share of
+# newly cleared forest as cropland. Weighted by each cell's 2000-2020 forest loss, and by the extra forest
+# the primary scenario (vo_rs) clears 1, 15 and 25 years after the shock (02's per-pixel results, with
+# area = biomass / CF as in 03_summarise_results.R).
+
+results_dir <- file.path(wdir, "2_processing/full/results")
+extra <- data.table::rbindlist(lapply(sort(list.files(results_dir, "^results_chunk_\\d+\\.parquet$", full.names = TRUE)), function(f) {
+  r <- data.table::as.data.table(arrow::read_parquet(f))[scn %in% c("bau", "vo_rs")]
+  base <- min(r$year)
+  r <- r[year %in% (base + c(1, 15, 25))]
+  ch <- data.table::as.data.table(arrow::read_parquet(
+    file.path(chunks_dir, sub("^results_", "", basename(f))), col_select = c("pixel_id", "CF")
+  ))
+  w <- data.table::dcast(r, pixel_id + year ~ scn, value.var = "biomass")[ch, on = "pixel_id", nomatch = NULL]
+  w[, .(pixel_id, years = year - base, extra_ha = (bau - vo_rs) / CF)]
+}))
+extra <- cells[, .(pixel_id, country, ag = data.table::fcoalesce(ag, 0))][extra, on = "pixel_id"]
+stopifnot("Result pixels missing from the crop data" = !anyNA(extra$country))
+
+scopes <- list(
+  "All countries" = unique(cells$country), Indonesia = "Indonesia", Malaysia = "Malaysia",
+  "Democratic Republic of the Congo" = "Democratic Republic of the Congo", Brazil = "Brazil"
+)
+cropland_share <- data.table::rbindlist(lapply(names(scopes), function(s) {
+  h <- cells[country %in% scopes[[s]] & !is.na(ag) & !is.na(loss_ha)]
+  x <- extra[country %in% scopes[[s]]]
+  data.table::rbindlist(list(
+    data.table::data.table(
+      scope = s, weight = "2000-2020 forest loss", years = NA_integer_,
+      forest_mha = sum(h$loss_ha) / 1e6, cropland_share = sum(h$loss_ha * h$ag) / sum(h$loss_ha)
+    ),
+    x[, .(scope = s, weight = "vo_rs extra clearing", forest_mha = sum(extra_ha) / 1e6,
+      cropland_share = sum(extra_ha * ag) / sum(extra_ha)), by = years]
+  ), use.names = TRUE)
+}))
+data.table::fwrite(cropland_share, file.path(derived, "crop_mix_cropland_share.csv"))
+
 print(numbers)
 print(demand_elas)
+print(cropland_share)
 print(regions)
 print(countries[1:12])
