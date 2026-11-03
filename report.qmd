@@ -1045,7 +1045,19 @@ where $\Delta C(T)$ is the cumulative additional forest carbon loss $T$ years af
 
 There is no standard value for $T$. The EU uses 20 years [@valin2015, p. 3] and the US EPA uses 30 years [@chen2026, p. 13]. We report 20, 25, and 30 years, and use 25 years for our headline value. This is the period Chen et al. use to match the oil palm replanting cycle [@chen2026, p. 13], so our value can be compared directly with their 84.1 g CO₂e/MJ. ICCT's 62 g CO₂e/MJ comes from the EPA's model comparison, which divides cumulative 2020–2050 emissions by cumulative fuel use over the same years [@epa2023mce, pp. 83–84], so it is most comparable to our 30-year value.
 
-The result only counts CO₂ from forest biomass. We split it by country using each country's share of the additional loss, and by crop using the palm-only and soy-only runs.
+The result only counts CO₂ from the living biomass (i.e., trees and their roots) of the additional forest that is cleared. It does not count:
+
+- carbon in soils or peat;
+- carbon in dead wood and litter;
+- non-CO₂ greenhouse gases, such as methane and nitrous oxide from fires or drained peat;
+- the carbon that the cleared forest would have taken up in the future;
+- land-use change outside of forests (e.g., grasslands and savannas);
+- land-use change from rapeseed and sunflower, which are not in the model; or
+- the carbon taken up by the crops that replace the forest.
+
+All but the last of these make our values too low. The last makes them too high: @chen2026 [Table 1, p. 13] subtract 29.4 g CO₂e/MJ for the carbon taken up by new oil palms.
+
+We split the result by country using each country's share of the additional loss, and by crop using the palm-only and soy-only runs.
 
 ## Use of generative AI
 
