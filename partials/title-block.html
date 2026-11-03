@@ -1,0 +1,43 @@
+<!-- Quarto's default HTML title block (share/formats/html/templates/title-block.html), with the
+     emLab and UCSB logos above the title. Used by report.qmd only (template-partials). -->
+<style>
+  .report-logos { display: flex; flex-wrap: wrap; align-items: center; gap: 1.5rem 2.5rem; margin-bottom: 1.75rem; }
+  .report-logos img { width: auto; }
+  .report-logos .logo-emlab { height: 60px; }
+  .report-logos .logo-ucsb { height: 64px; } /* the UCSB file has more padding around the mark */
+</style>
+<div class="report-logos">
+  <a href="https://emlab.ucsb.edu"><img class="logo-emlab" src="images/emlab-logo.svg" alt="emLab, UC Santa Barbara"></a>
+  <a href="https://www.ucsb.edu"><img class="logo-ucsb" src="images/ucsb-logo.png" alt="UC Santa Barbara"></a>
+</div>
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+$if(title)$
+<h1 class="title">$title$</h1>
+$endif$
+$if(subtitle)$
+<p class="subtitle lead">$subtitle$</p>
+$endif$
+$if(categories)$
+  $if(quarto-template-params.title-block-categories)$
+<div class="quarto-categories">
+  $for(categories)$
+  <div class="quarto-category">$categories$</div>
+  $endfor$
+</div>
+  $endif$
+$endif$
+</div>
+
+$if(hide-description)$
+$elseif(description)$
+<div>
+  <div class="description">
+    $description$
+  </div>
+</div>
+$endif$
+
+$title-metadata.html()$
+
+</header>

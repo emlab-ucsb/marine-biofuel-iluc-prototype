@@ -10,6 +10,12 @@ format:
     theme: cosmo
     embed-resources: false
     fig-dpi: 150
+    # emLab and UCSB logos above the title
+    template-partials:
+      - partials/title-block.html
+resources:
+  - images/emlab-logo.svg
+  - images/ucsb-logo.png
 execute:
   echo: false
   message: false

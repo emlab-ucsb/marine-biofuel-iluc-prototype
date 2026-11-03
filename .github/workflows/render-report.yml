@@ -9,6 +9,8 @@ on:
       - 'r/report_setup.R'
       - '_quarto.yml'
       - '_link-copy.html'
+      - 'partials/**'
+      - 'images/**'
       - 'references.bib'
       - 'apa.csl'
       - 'renv.lock'
