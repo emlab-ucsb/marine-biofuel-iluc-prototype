@@ -4,7 +4,7 @@
 #################################
 #
 # Reads the land-use model's inputs (read-only, via r/land_use_model/paths.R) and this repo's model
-# run (land_use_model_runs/, from r/land_use_model/run_pipeline.R), and writes six small files to
+# run (land_use_model_runs/, from r/land_use_model/run_pipeline.R), and writes five small files to
 # data/derived/ for the report:
 # - crop_mix_grid.csv.gz: per 0.5-degree square, the palm and soybean shares of the crop mix the model
 #   uses (harvested_share_gaez, set per GAEZ zone) and of M3 harvested area in the same cells.
@@ -12,10 +12,7 @@
 #   where palm is more than 5% of the crop mix.
 # - crop_mix_regions.csv: palm and soybean shares (model and M3) and the cropland share of forest
 #   loss in four well-known palm and soy frontiers.
-# - crop_mix_numbers.csv: headline counts, and the model's first-year response to a +1% palm price in
-#   Indonesia and Malaysia next to the response implied by Chen et al. (2026).
-# - model_demand_elasticities.csv: the demand elasticity per crop that the model's own price
-#   calculation (00c_run_cobweb.R) pairs with its supply from newly cleared forest.
+# - crop_mix_numbers.csv: headline counts.
 # - crop_mix_cropland_share.csv: the share of forest loss the model counts as cropland
 #   (def_for_ag_share), weighted by 2000-2020 forest loss and by the primary scenario's extra clearing.
 #
@@ -29,13 +26,6 @@ output_dir <- file.path(wdir, "3_output/full")
 derived    <- here::here("data/derived")
 
 MAP_RES_DEG <- 0.5
-
-# Chen et al. (2026), Indonesia and Malaysia, 2002-2018 (pp. 5 and S5): +$1,000/ha of annual
-# attainable palm revenue (price x GAEZ attainable yield) adds 9.3 ha of forest-to-palm conversion a
-# year per 9 km cell; mean attainable revenue $1,933/ha; 32,394 cells.
-CHEN_HA_PER_1000 <- 9.3
-CHEN_MEAN_REVENUE <- 1933
-CHEN_CELLS <- 32394
 
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 # Crop mix per simulated cell: the zone-level shares the model uses, and M3 harvested areas -----
@@ -64,7 +54,7 @@ m3 <- shc[, .(
 stopifnot("A cell has more than one GAEZ zone" = all(m3$n_gaez == 1))
 rm(shc)
 
-# endo_input_data: the crop shares, yields and cropland share 01_prepare_data.R and update_revenues() use.
+# endo_input_data: the crop shares and cropland share 01_prepare_data.R and update_revenues() use.
 load(file.path(input_dir, "K_endo_input_data.Rdata"))
 endo <- data.table::as.data.table(endo_input_data[endo_input_data$crop %in% c("Oil, palm", "Soybeans"), ])
 rm(endo_input_data)
@@ -72,10 +62,13 @@ gc()
 cells <- data.table::dcast(
   endo,
   pixel_id + ha_pixel + def_for_ag_share + cumulative_forest_loss_pixel_count ~ crop,
-  value.var = c("harvested_share_gaez", "m3_yield_ton_per_ha")
+  value.var = "harvested_share_gaez"
 )
-data.table::setnames(cells, c("pixel_id", "ha_pixel", "ag", "loss_px", "palm", "soy", "y_palm", "y_soy"))
-supply_base <- endo[, .(supply_t = supply_crop_2020[1]), by = crop] # one value per crop
+data.table::setnames(
+  cells,
+  c("pixel_id", "ha_pixel", "def_for_ag_share", "cumulative_forest_loss_pixel_count", "Oil, palm", "Soybeans"),
+  c("pixel_id", "ha_pixel", "ag", "loss_px", "palm", "soy")
+)
 rm(endo)
 
 cells <- cells[grid, on = "pixel_id", nomatch = NULL]
@@ -137,78 +130,16 @@ data.table::fwrite(regions, file.path(derived, "crop_mix_regions.csv"))
 by_zone <- cells[, .(distinct_palm = data.table::uniqueN(palm), distinct_soy = data.table::uniqueN(soy)), by = gaez]
 
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-# First-year response to +1% palm price in Indonesia and Malaysia -----
-# Uses the chunk inputs of this repo's model run (01_prepare_data.R) and the scenario that shocks
-# palm alone. Revenue is linear in each price, so +1% palm revenue is BAU revenue plus 1/shock of
-# that scenario's revenue change. pred() is simulate_10_dt()'s first-year deforestation rate.
-
-mp <- readRDS(file.path(chunks_dir, "model_params.rds"))
-scen <- data.table::fread(file.path(output_dir, "price_scenarios.csv"))
-shocked <- scen[pct_change != 0, .(crops = paste(sort(unique(crop)), collapse = "+"), pct = pct_change[1]), by = scenario]
-palm_only <- shocked[crops == "Oil, palm"][1]
-stopifnot("No palm-only scenario in price_scenarios.csv" = nrow(palm_only) == 1 && !is.na(palm_only$scenario))
-
-chunk_files <- sort(list.files(chunks_dir, "^chunk_\\d+\\.parquet$", full.names = TRUE))
-im <- data.table::rbindlist(lapply(chunk_files, function(f) {
-  ch <- data.table::as.data.table(arrow::read_parquet(f))[country %in% c("Indonesia", "Malaysia")]
-  if (nrow(ch) == 0) return(NULL)
-  rev_palm <- ch[[paste0("revenue_", palm_only$scenario)]]
-  rev_1pct <- ch$revenue_bau + (rev_palm - ch$revenue_bau) / palm_only$pct
-  pred <- function(rev) mp$linkinv(rev * mp$alpha + ch$remaining_treecover_share * mp$beta + ch$pixel_fe + ch$yc_fe)
-  ch[, .(
-    pixel_id,
-    extra_px = lag_remaining_treecover * (pred(rev_1pct) - pred(revenue_bau)),
-    d_rev_annual = (rev_1pct - revenue_bau) * 0.05 # update_revenues() capitalizes at 5%
-  )]
-}))
-im <- cells[, .(pixel_id, ha_pixel, ag, palm, y_palm)][im, on = "pixel_id"]
-im[, `:=`(extra_ha = extra_px * ha_pixel, ag = data.table::fcoalesce(ag, 0))]
-
-model_ha      <- sum(im$extra_ha)
-model_palm_t  <- sum(im$extra_ha * im$ag * im$palm * im$y_palm, na.rm = TRUE)
-all_palm_t    <- sum(im$extra_ha * im$y_palm, na.rm = TRUE)
-yield_im      <- all_palm_t / model_ha # model's palm yield, weighted by where the extra clearing is
-# Change in a cell's annual revenue from +1% palm price, as the model sees it (diluted by the palm
-# share of the crop mix) and per hectare of palm (undiluted).
-d_rev_mix  <- mean(im$d_rev_annual)
-d_rev_palm <- mean(im$d_rev_annual[im$palm > 0] / im$palm[im$palm > 0])
-chen_ha    <- CHEN_HA_PER_1000 * 0.01 * CHEN_MEAN_REVENUE / 1000 * CHEN_CELLS
-world_palm_t <- 78.938e6 # USDA PSD 2024/25, as in report.qmd
+# Headline counts -----
 
 numbers <- data.table::data.table(metric = c(
   "cells", "distinct_palm_shares", "distinct_soy_shares", "palm_share_max",
-  "gaez_zones", "gaez_zones_with_more_than_one_palm_or_soy_share",
-  "im_palm_only_scenario_pct",
-  "im_cells", "im_model_extra_clearing_ha", "im_model_extra_palm_t", "im_model_palm_t_if_all_cleared_land_were_palm",
-  "im_model_palm_yield_t_per_ha", "im_model_d_rev_annual_crop_mix", "im_model_d_rev_annual_per_ha_palm",
-  "im_chen_extra_clearing_ha", "im_chen_d_rev_annual_per_ha_palm",
-  "im_model_elasticity", "im_chen_elasticity",
-  "supply_crop_2020_palm_t", "supply_crop_2020_soy_t"
+  "gaez_zones", "gaez_zones_with_more_than_one_palm_or_soy_share"
 ), value = c(
   nrow(cells), data.table::uniqueN(cells$palm), data.table::uniqueN(cells$soy), max(cells$palm),
-  nrow(by_zone), sum(by_zone$distinct_palm > 1 | by_zone$distinct_soy > 1),
-  palm_only$pct,
-  nrow(im), model_ha, model_palm_t, all_palm_t,
-  yield_im, d_rev_mix, d_rev_palm,
-  chen_ha, 0.01 * CHEN_MEAN_REVENUE,
-  model_palm_t / world_palm_t / 0.01, chen_ha * yield_im / world_palm_t / 0.01,
-  supply_base[crop == "Oil, palm", supply_t], supply_base[crop == "Soybeans", supply_t]
+  nrow(by_zone), sum(by_zone$distinct_palm > 1 | by_zone$distinct_soy > 1)
 ))
 data.table::fwrite(numbers, file.path(derived, "crop_mix_numbers.csv"))
-
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-# The model's own demand elasticities -----
-# 00c_run_cobweb.R's apply_elasticity() divides each crop's supply shock from newly cleared forest by
-# its entry on the diagonal of elas_pivot to get the price shock, and stops if any off-diagonal entry
-# is non-zero.
-
-load(file.path(input_dir, "K_elas_pivot_full.Rdata"))
-elas <- data.table::as.data.table(elas_pivot)
-elas_crops <- as.character(elas$crop)
-elas_mat <- as.matrix(elas[, elas_crops, with = FALSE])
-stopifnot("elas_pivot is not diagonal" = all(elas_mat[row(elas_mat) != col(elas_mat)] == 0, na.rm = TRUE))
-demand_elas <- data.table::data.table(crop = elas_crops, elasticity = diag(elas_mat))
-data.table::fwrite(demand_elas, file.path(derived, "model_demand_elasticities.csv"))
 
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 # Share of forest loss the model counts as cropland -----
@@ -251,7 +182,6 @@ cropland_share <- data.table::rbindlist(lapply(names(scopes), function(s) {
 data.table::fwrite(cropland_share, file.path(derived, "crop_mix_cropland_share.csv"))
 
 print(numbers)
-print(demand_elas)
 print(cropland_share)
 print(regions)
 print(countries[1:12])
