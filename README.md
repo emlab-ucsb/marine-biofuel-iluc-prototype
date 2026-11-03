@@ -7,7 +7,12 @@ This repository contains a report documenting a protype proof-of-concept analysi
 The rendered analysis report is hosted on GitHub Pages:
 **https://emlab-ucsb.github.io/marine-biofuel-iluc-prototype/**
 
-The report is automatically re-rendered and redeployed whenever changes to `report.qmd` or `_quarto.yml` are pushed to the `main` branch.
+The site has two pages:
+
+- `report.qmd`, the report for ICCT. It is the site's home page.
+- `technical-notes.qmd`, technical notes for collaborators: every change we made to emLab's land-use model, the first test run, and our questions for the model's authors. Nothing in the report links to it, so share its link directly. The page is unlisted, not private: anyone with the link, or anyone browsing this public repository, can find it.
+
+Both pages read their data, headline numbers and figure theme from `r/report_setup.R`. The site is automatically re-rendered and redeployed whenever changes to either page, `r/report_setup.R`, `data/`, `_quarto.yml` or the other files listed in `.github/workflows/render-report.yml` are pushed to the `main` branch.
 
 ## Running the analysis locally
 
@@ -39,10 +44,10 @@ To render the report locally, first install [Quarto](https://quarto.org/docs/get
 quarto render
 ```
 
-The output will be written to `_site/`. Note that `_site/` is not tracked in git, since GitHub renders the report automatically using GitHub Actions each time  changes to `report.qmd` or `_quarto.yml` are pushed to the `main` branch.
+The output will be written to `_site/`. Note that `_site/` is not tracked in git, since GitHub renders the site automatically using GitHub Actions each time changes are pushed to the `main` branch.
 
 ## Use of generative AI
 
-Claude (Anthropic, model Opus 5.5) was used through Claude Code as a coding and writing assistant. It drafted and edited much of the R code, including the changes to the vendored land-use model listed in the report's Appendix A, and much of the report prose, and it helped find and check sources. GitHub Copilot's coding agent set up the initial Quarto report and GitHub Pages workflow. We set the research question and scenarios, chose the data sources and key assumptions, and reviewed the code and text. The AI tools are not authors, and we are responsible for all code, analysis and conclusions.
+Claude (Anthropic, model Opus 5.5) was used through Claude Code as a coding and writing assistant. It drafted and edited much of the R code, including the changes to the vendored land-use model listed in the technical notes, and much of the report prose, and it helped find and check sources. GitHub Copilot's coding agent set up the initial Quarto report and GitHub Pages workflow. We set the research question and scenarios, chose the data sources and key assumptions, and reviewed the code and text. The AI tools are not authors, and we are responsible for all code, analysis and conclusions.
 
 The AI tools produced no data or results: every number, figure and table in the report is computed from the code in this repository when the report is rendered. Most commits made with Claude's help carry a `Co-Authored-By: Claude` trailer.

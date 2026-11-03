@@ -6,13 +6,11 @@
 # PURPOSE:
 # Reduces the per-pixel results of 02_run_simulations.R to two small files for report.qmd:
 # - data/derived/land_use_country_results.csv.gz: country x scenario x year totals of forest
-#   carbon (t CO2) and forest area (ha), and of the palm oil and soybeans (t) the remaining forest
-#   would yield if cleared (forest_palm_oil_t, forest_soybeans_t, using 01_prepare_data.R's
-#   per-pixel crop output). BAU minus a scenario gives the extra crop output on the extra land
-#   that scenario clears.
+#   carbon (t CO2) and forest area (ha).
 # - data/derived/land_use_grid_loss.csv.gz: for mapping, each MAP_RES_DEG grid square's 2020
-#   forest carbon and its additional forest carbon loss relative to BAU in the final model year,
-#   one column per scenario (t CO2).
+#   forest carbon and its additional forest loss relative to BAU in the final model year, one
+#   column per scenario, as carbon (loss_<scenario>_tco2, t CO2) and as forest area
+#   (loss_<scenario>_ha, ha).
 #
 # UNITS (upstream conventions):
 # - biomass (02 output) = remaining_treecover_share x CF_pix x pixel_count, in t CO2. Upstream
@@ -57,31 +55,26 @@ summarise_pair <- function(result_file, chunk_file) {
   options(arrow.use_threads = FALSE)
 
   px  <- data.table::as.data.table(
-    arrow::read_parquet(chunk_file, col_select = c("pixel_id", "country", "CF", "CF_pix",
-                                                   "palm_oil_t_per_px", "soybeans_t_per_px"))
+    arrow::read_parquet(chunk_file, col_select = c("pixel_id", "country", "CF"))
   )
   res <- data.table::as.data.table(arrow::read_parquet(result_file))
   n_res <- nrow(res)
 
   res <- px[res, on = "pixel_id"]
-  if (nrow(res) != n_res || anyNA(res[, .(country, CF, CF_pix, palm_oil_t_per_px, soybeans_t_per_px)])) {
+  if (nrow(res) != n_res || anyNA(res$country) || anyNA(res$CF)) {
     stop("Join of ", basename(result_file), " with ", basename(chunk_file),
-         " changed row count or left pixels without country, CF or crop output")
+         " changed row count or left pixels without country/CF")
   }
 
-  # biomass / CF_pix is the pixel's remaining forest in 30 m pixels (biomass = share x CF_pix x pixel_count).
-  country <- res[, .(
-    forest_carbon_tco2 = sum(biomass),
-    forest_area_ha     = sum(biomass / CF),
-    forest_palm_oil_t  = sum(biomass / CF_pix * palm_oil_t_per_px),
-    forest_soybeans_t  = sum(biomass / CF_pix * soybeans_t_per_px)
-  ), by = .(country, scenario = scn, year)]
+  country <- res[, .(forest_carbon_tco2 = sum(biomass), forest_area_ha = sum(biomass / CF)),
+                 by = .(country, scenario = scn, year)]
 
-  # Per-pixel additional loss vs BAU in the final year (positive = more loss than BAU).
-  final <- res[year == max(year), .(pixel_id, scenario = scn, biomass)]
+  # Per-pixel additional loss vs BAU in the final year (positive = more loss than BAU), as carbon
+  # and as forest area (biomass / CF, as for forest_area_ha above).
+  final <- res[year == max(year), .(pixel_id, scenario = scn, biomass, CF)]
   bau   <- final[scenario == "bau", .(pixel_id, biomass_bau = biomass)]
   pixel_loss <- bau[final[scenario != "bau"], on = "pixel_id"][
-    , .(pixel_id, scenario, loss_tco2 = biomass_bau - biomass)]
+    , .(pixel_id, scenario, loss_tco2 = biomass_bau - biomass, loss_ha = (biomass_bau - biomass) / CF)]
 
   list(country = country, pixel_loss = pixel_loss)
 }
@@ -97,8 +90,8 @@ future::plan(future::sequential)
 
 # --- Country totals: countries span chunks, so sum the per-chunk partial totals ---
 country_results <- data.table::rbindlist(lapply(partials, `[[`, "country"))[
-  , lapply(.SD, sum), by = .(country, scenario, year),
-  .SDcols = c("forest_carbon_tco2", "forest_area_ha", "forest_palm_oil_t", "forest_soybeans_t")
+  , .(forest_carbon_tco2 = sum(forest_carbon_tco2), forest_area_ha = sum(forest_area_ha)),
+  by = .(country, scenario, year)
 ][order(country, scenario, year)]
 
 # Check: BAU 2020 forest carbon must equal 01's independently written per-pixel 2020 biomass.
@@ -125,21 +118,28 @@ grid_smry[, `:=`(
 pixel_loss <- grid_smry[, .(pixel_id, lon_sq, lat_sq)][pixel_loss, on = "pixel_id"]
 stopifnot("Pixels in results without coordinates" = !anyNA(pixel_loss$lon_sq))
 
+grid_long <- data.table::melt(
+  pixel_loss[, .(tco2 = sum(loss_tco2), ha = sum(loss_ha)), by = .(lon_sq, lat_sq, scenario)],
+  measure.vars = c("tco2", "ha"), variable.name = "unit", value.name = "loss"
+)
 grid_loss <- data.table::dcast(
-  pixel_loss[, .(loss_tco2 = sum(loss_tco2)), by = .(lon_sq, lat_sq, scenario)],
-  lon_sq + lat_sq ~ paste0("loss_", scenario, "_tco2"), value.var = "loss_tco2"
+  grid_long, lon_sq + lat_sq ~ paste0("loss_", scenario, "_", unit), value.var = "loss"
 )
 grid_forest <- grid_smry[, .(forest_carbon_2020_tco2 = sum(biomass_2020)), by = .(lon_sq, lat_sq)]
 grid_loss <- grid_loss[grid_forest, on = c("lon_sq", "lat_sq")][order(lat_sq, lon_sq)]
 data.table::setnames(grid_loss, c("lon_sq", "lat_sq"), c("lon", "lat"))
 
-# Check: each scenario's gridded loss sums to its country-level loss in the final year.
+# Check: each scenario's gridded carbon and area loss sum to its country-level loss in the final year.
 final_year <- max(country_results$year)
+country_cols <- c(tco2 = "forest_carbon_tco2", ha = "forest_area_ha")
 for (s in setdiff(unique(country_results$scenario), "bau")) {
-  country_loss <- sum(country_results[scenario == "bau" & year == final_year, forest_carbon_tco2]) -
-    sum(country_results[scenario == s & year == final_year, forest_carbon_tco2])
-  stopifnot(isTRUE(all.equal(sum(grid_loss[[paste0("loss_", s, "_tco2")]]), country_loss,
-                             tolerance = 1e-8)))
+  for (unit in names(country_cols)) {
+    v <- country_cols[[unit]]
+    country_loss <- sum(country_results[scenario == "bau" & year == final_year, get(v)]) -
+      sum(country_results[scenario == s & year == final_year, get(v)])
+    stopifnot(isTRUE(all.equal(sum(grid_loss[[paste0("loss_", s, "_", unit)]]), country_loss,
+                               tolerance = 1e-8)))
+  }
 }
 
 readr::write_csv(country_results, country_file)

@@ -1,13 +1,17 @@
 project:
   type: website
   output-dir: _site
-  # Only the report is a page. Without this, Quarto also publishes every .md file in the repo
-  # (e.g. r/land_use_model/PROVENANCE.md) and points the site root at the first one.
+  # Only these two are pages, and the report comes first so the site root opens it. Without this
+  # list, Quarto also publishes every .md file in the repo (e.g. r/land_use_model/PROVENANCE.md).
+  # technical-notes.qmd is for collaborators: it is unlisted, and nothing in the report links to it.
   render:
     - report.qmd
+    - technical-notes.qmd
 
 website:
   title: "Marine Biofuel ILUC Prototype"
+  # No site search: it would index the technical notes and make them findable from the report.
+  search: false
   navbar:
     left:
       - href: report.qmd
@@ -17,3 +21,4 @@ format:
   html:
     theme: cosmo
     toc: true
+    include-after-body: _link-copy.html

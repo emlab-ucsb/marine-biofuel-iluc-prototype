@@ -25,8 +25,8 @@ Not copied: `logs/` (old upstream pipeline run logs).
    0, carbon-price scenarios replaced by crop-price scenarios, input/output paths moved to a new `paths.R` that refuses to write inside Nextcloud, every unadapted script disabled with a `stop()`, and a new `03_summarise_results.R` that
    aggregates results by country and grid square.
 
-The full, numbered list of every change since import is kept in one place: "Appendix A: Changes to
-the land-use model code" in `report.qmd` (`#sec-lum-changes`). Record new changes there.
+The full, numbered list of every change since import is kept in one place: "Changes to the emLab
+model code" in `technical-notes.qmd` (`#sec-lum-changes`). Record new changes there.
 
 ## Checking upstream for changes
 
