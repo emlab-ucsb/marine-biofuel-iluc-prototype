@@ -375,12 +375,22 @@ About half of the full-run loss (`r fmt0(100 * gl("vo_rs", 2035, "carbon_loss") 
 #| column: body-outset
 #| fig-width: 10
 #| fig-height: 5.2
-#| fig-cap: "Cumulative additional forest carbon loss in the primary scenario over the full horizon, per 0.5° grid square. Gray squares have modeled forest but less than 1 kt CO₂ of additional loss."
+#| fig-cap: "Cumulative additional forest carbon loss in the primary scenario over the full horizon, per km² of each 0.5° grid square. Square areas include any water. Gray squares have modeled forest but less than 1 t CO₂ per km² of additional loss."
 
 grid <- utils::read.csv(file.path("data", "derived", "land_use_grid_loss.csv.gz"))
-grid_classes <- c("< 1", "1–10", "10–100", "100–500", "500–1,000", "1,000–2,500", "≥ 2,500")
+
+# Both grid maps divide by each square's area, since a 0.5-degree square shrinks toward the poles. On a
+# sphere its area is R^2 * d_lon * (sin(lat_north) - sin(lat_south)), with R the mean Earth radius
+# (6,371.0088 km).
+earth_radius_km <- 6371.0088
+deg_to_rad <- pi / 180
+grid$square_km2 <- earth_radius_km^2 * (0.5 * deg_to_rad) *
+  (sin((grid$lat + 0.25) * deg_to_rad) - sin((grid$lat - 0.25) * deg_to_rad))
+stopifnot("Grid square areas must be positive" = all(grid$square_km2 > 0))
+
+grid_classes <- c("< 1", "1–10", "10–100", "100–250", "250–500", "500–1,000", "≥ 1,000")
 grid$class <- factor(
-  cut(grid$loss_vo_rs_tco2 / 1e3, c(-Inf, 1, 10, 100, 500, 1000, 2500, Inf), right = FALSE, labels = grid_classes),
+  cut(grid$loss_vo_rs_tco2 / grid$square_km2, c(-Inf, 1, 10, 100, 250, 500, 1000, Inf), right = FALSE, labels = grid_classes),
   levels = grid_classes
 )
 
@@ -393,7 +403,7 @@ ggplot2::ggplot() +
   ggplot2::geom_tile(data = grid, ggplot2::aes(lon, lat, fill = class), width = 0.5, height = 0.5) +
   ggplot2::scale_fill_manual(
     values = stats::setNames(c("#d6d4cc", map_ramp(6)), grid_classes),
-    name = expression("Additional loss (kt CO"[2] * " per square)"),
+    name = expression("Additional loss (t CO"[2] * " per km"^2 * ")"),
     drop = FALSE,
     guide = ggplot2::guide_legend(nrow = 1, title.position = "top", label.position = "bottom", keywidth = ggplot2::unit(1.6, "cm"), keyheight = ggplot2::unit(0.3, "cm"))
   ) +
@@ -536,14 +546,8 @@ This section shows the same results in terms of hectares of forest cleared, rath
 #| fig-height: 5.2
 #| fig-cap: "Cumulative additional forest area cleared in the primary scenario over the full horizon, as a share of each 0.5° grid square's area (1% equals 1 ha per km²). Square areas include any water. Gray squares have modeled forest but less than 0.01% of their area cleared."
 
-# Area cleared as a share of each grid square's area. A 0.5-degree square shrinks toward the poles; its
-# area on a sphere is R^2 * d_lon * (sin(lat_north) - sin(lat_south)), with R the mean Earth radius
-# (6,371.0088 km). Hectares per km2 equal percent of area (1 km2 = 100 ha).
-earth_radius_km <- 6371.0088
-deg_to_rad <- pi / 180
-grid$square_km2 <- earth_radius_km^2 * (0.5 * deg_to_rad) *
-  (sin((grid$lat + 0.25) * deg_to_rad) - sin((grid$lat - 0.25) * deg_to_rad))
-stopifnot("Grid square areas must be positive" = all(grid$square_km2 > 0))
+# Area cleared as a share of each grid square's area (square_km2, from the carbon map chunk).
+# Hectares per km2 equal percent of area (1 km2 = 100 ha).
 grid$pct_area_cleared <- grid$loss_vo_rs_ha / grid$square_km2
 
 area_grid_classes <- c("< 0.01", "0.01–0.1", "0.1–0.5", "0.5–1", "1–2.5", "2.5–5", "≥ 5")
