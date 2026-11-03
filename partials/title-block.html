@@ -1,5 +1,6 @@
 <!-- Quarto's default HTML title block (share/formats/html/templates/title-block.html), with the
-     emLab and UCSB logos above the title. Used by report.qmd only (template-partials). -->
+     emLab and UCSB logos above the title and, below Author and Published, the contact person from
+     the document's `contact` metadata. Used by report.qmd only (template-partials). -->
 <style>
   .report-logos { display: flex; flex-wrap: wrap; align-items: center; gap: 1.5rem 2.5rem; margin-bottom: 1.75rem; }
   .report-logos img { width: auto; }
@@ -39,5 +40,18 @@ $elseif(description)$
 $endif$
 
 $title-metadata.html()$
+
+$if(contact)$
+<div class="quarto-title-meta report-contact">
+  <div>
+    <div class="quarto-title-meta-heading">Contact</div>
+    <div class="quarto-title-meta-contents">
+      <p>$contact.name$$if(contact.role)$, $contact.role$$endif$<br>
+      <a href="mailto:$contact.email$">$contact.email$</a>$if(contact.website)$<br>
+      $contact.website$$endif$</p>
+    </div>
+  </div>
+</div>
+$endif$
 
 </header>

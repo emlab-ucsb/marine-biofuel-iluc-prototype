@@ -3,6 +3,12 @@ title: "ILUC implications of marine biofuel demand under the IMO Net-Zero Framew
 subtitle: "Prototype analysis: preliminary and exploratory results"
 authors: Environmental Markets Lab (emLab), University of California, Santa Barbara (UCSB). For the International Council on Clean Transportation (ICCT)
 date: today
+# Shown under Author and Published by partials/title-block.html
+contact:
+  name: "[Gavin McDonald](https://emlab.ucsb.edu/about/our-team/gavin-mcdonald)"
+  role: Senior Project Scientist
+  email: gmcdonald@bren.ucsb.edu
+  website: "[emlab.ucsb.edu](https://emlab.ucsb.edu)"
 format:
   html:
     toc: true
