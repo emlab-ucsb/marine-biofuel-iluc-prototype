@@ -200,7 +200,7 @@ The analysis consists of five steps:
 1. Translate ICCT's 2035 vegetable-oil demand into a price shock, using Roberts & Schlenker's central supply and demand elasticities.
 2. Translate the price shock into prices for the emLab model's crops.
 3. Run the model with baseline prices and with shocked prices, and take the difference in forest loss.
-4. Spread the additional emissions over the fuel used, giving a value in g CO₂ per MJ.
+4. Divide the additional emissions by the energy in the VO-RD used over an accounting period (`r headline_years` years for our headline value). This gives the ILUC carbon intensity of VO-RD (also called an ILUC factor or ILUC value) in g CO₂ per MJ of fuel, which can be added to the fuel's direct life-cycle carbon intensity.
 5. For the sensitivity analysis, repeat steps 1–4 using the low and high ends of Roberts & Schlenker's estimates.
 
 Similar to Chen et al., we estimate how much the demand shift raises prices, and then use an econometric land-use model to translate prices into forest loss. This differs from approaches that assume a fixed ILUC factor. [Appendix A](#background) provides more background on the IMO Net-Zero Framework and published ILUC estimates, and [Appendix B](#methods-and-assumptions) describes each step in detail.
