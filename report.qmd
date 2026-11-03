@@ -525,8 +525,6 @@ DT::datatable(
 
 `r sum(rs_final$carbon_loss > 0)` countries lose some additional forest. However, `r the_country(rs_final$country[1])`, `r the_country(rs_final$country[2])`, and `r the_country(rs_final$country[3])` account for `r fmt0(100 * sum(rs_final$share[1:3]))`% of the total. Only grid cells that grow oil palm or soybeans respond, since those are the only crop prices that change.
 
-Since cleared forest never grows back in the model, forest that is cleared early in a shocked run can instead be cleared later in the BAU run. In Malaysia, for example, the additional loss peaks at `r fmt0(mys$peak / 1e6)` Mt CO₂ in model year `r mys$peak_year` and falls to `r fmt0(mys$final / 1e6)` Mt CO₂ by `r final_year`. Overall, `r n_narrowing` countries end more than 5% below their peak. Globally, the additional loss is still increasing at the end of the run. The ILUC estimates only count loss within the accounting period, so this late catch-up does not affect them.
-
 #### Forest area cleared {#sec-results-area}
 
 This section shows the same results in terms of hectares of forest cleared, rather than tonnes of CO₂.
