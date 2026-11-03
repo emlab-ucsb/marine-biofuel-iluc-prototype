@@ -534,11 +534,21 @@ This section shows the same results in terms of hectares of forest cleared, rath
 #| column: body-outset
 #| fig-width: 10
 #| fig-height: 5.2
-#| fig-cap: "Cumulative additional forest area cleared in the primary scenario over the full horizon, per 0.5° grid square. Gray squares have modeled forest but less than 10 ha of additional loss."
+#| fig-cap: "Cumulative additional forest area cleared in the primary scenario over the full horizon, as a share of each 0.5° grid square's area (1% equals 1 ha per km²). Square areas include any water. Gray squares have modeled forest but less than 0.01% of their area cleared."
 
-area_grid_classes <- c("< 10", "10–100", "100–1,000", "1,000–5,000", "5,000–10,000", "10,000–25,000", "≥ 25,000")
+# Area cleared as a share of each grid square's area. A 0.5-degree square shrinks toward the poles; its
+# area on a sphere is R^2 * d_lon * (sin(lat_north) - sin(lat_south)), with R the mean Earth radius
+# (6,371.0088 km). Hectares per km2 equal percent of area (1 km2 = 100 ha).
+earth_radius_km <- 6371.0088
+deg_to_rad <- pi / 180
+grid$square_km2 <- earth_radius_km^2 * (0.5 * deg_to_rad) *
+  (sin((grid$lat + 0.25) * deg_to_rad) - sin((grid$lat - 0.25) * deg_to_rad))
+stopifnot("Grid square areas must be positive" = all(grid$square_km2 > 0))
+grid$pct_area_cleared <- grid$loss_vo_rs_ha / grid$square_km2
+
+area_grid_classes <- c("< 0.01", "0.01–0.1", "0.1–0.5", "0.5–1", "1–2.5", "2.5–5", "≥ 5")
 grid$area_class <- factor(
-  cut(grid$loss_vo_rs_ha, c(-Inf, 10, 100, 1000, 5000, 10000, 25000, Inf), right = FALSE, labels = area_grid_classes),
+  cut(grid$pct_area_cleared, c(-Inf, 0.01, 0.1, 0.5, 1, 2.5, 5, Inf), right = FALSE, labels = area_grid_classes),
   levels = area_grid_classes
 )
 
@@ -551,7 +561,7 @@ ggplot2::ggplot() +
   ggplot2::geom_tile(data = grid, ggplot2::aes(lon, lat, fill = area_class), width = 0.5, height = 0.5) +
   ggplot2::scale_fill_manual(
     values = stats::setNames(c("#d6d4cc", map_ramp(6)), area_grid_classes),
-    name = "Additional forest cleared (ha per square)",
+    name = "Additional forest cleared (% of square's area)",
     drop = FALSE,
     guide = ggplot2::guide_legend(nrow = 1, title.position = "top", label.position = "bottom", keywidth = ggplot2::unit(1.6, "cm"), keyheight = ggplot2::unit(0.3, "cm"))
   ) +
