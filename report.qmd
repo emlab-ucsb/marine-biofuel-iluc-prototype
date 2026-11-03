@@ -42,8 +42,8 @@ source(file.path("r", "report_setup.R"), local = knitr::knit_global())
 #| label: inputs
 #| include: false
 
-# ICCT's Table 1 and the baseline market Q0 feed the price shock in Results, which comes before the
-# Background and Methods sections that show them, so both are computed here.
+# The price shock and its inputs (ICCT's Table 1 and the baseline market Q0) are computed here,
+# because Results come before the appendices that show them.
 
 # ICCT Table 1: extract page 5 as text and keep only the data rows (years 2028–2035)
 pdf_path <- file.path(
@@ -101,16 +101,61 @@ psd_four_oils <- psd |>
   ) |>
   dplyr::arrange(dplyr::desc(production_mt))
 q0_mt <- sum(psd_four_oils$production_mt) # ~204 Mt
+
+# Price shock: Q0 in billion liters at 0.92 kg/L, ICCT's own soy-oil conversion
+# (12.4 Mt = 13.5 billion L, ICCT Table A1).
+oil_density_kg_l <- 0.92
+q0_billion_liters <- q0_mt / oil_density_kg_l # ~221 billion L
+
+# %ΔP_t = (D_t / Q0) * M, as a percent, with the central multiplier and at the low and high ends.
+# beyond_marginal flags years where the shift exceeds 25% of the market, outside the regime where
+# the approximation is reliable.
+price_shock <- icct_table_1 |>
+  dplyr::transmute(
+    year,
+    vo_demand_billion_liters,
+    demand_share_pct = 100 * vo_demand_billion_liters / q0_billion_liters,
+    pct_delta_p_rs = demand_share_pct * m_rs,
+    pct_delta_p_rs_low = demand_share_pct * rs_low$m,
+    pct_delta_p_rs_high = demand_share_pct * rs_high$m,
+    beyond_marginal = demand_share_pct > 25
+  )
+share_2035 <- price_shock$demand_share_pct[price_shock$year == 2035]
+
+# Hand-off to the land-use model (full precision, no rounding). 01_prepare_data.R reads
+# vegetable_oil_price_shock_2035.csv: the central shock and the low and high ends of Roberts &
+# Schlenker's estimates. The central elasticities are saved alongside.
+handoff_2035 <- price_shock |>
+  dplyr::filter(year == 2035) |>
+  dplyr::mutate(eps_s = eps_s_rs, eps_d = eps_d_rs)
+
+dir.create(file.path("data", "derived"), showWarnings = FALSE, recursive = TRUE)
+utils::write.csv(
+  handoff_2035,
+  file.path("data", "derived", "vegetable_oil_price_shock_2035.csv"),
+  row.names = FALSE
+)
+utils::write.csv(
+  price_shock,
+  file.path("data", "derived", "vegetable_oil_price_shock.csv"),
+  row.names = FALSE
+)
+
+# The setup chunk read this file for the report's text, before this render rewrote it. If it was out
+# of date, that text used old numbers: stop so the report is rendered again.
+if (!isTRUE(all.equal(shock_2035, as.data.frame(handoff_2035), check.attributes = FALSE))) {
+  stop("vegetable_oil_price_shock_2035.csv was out of date and has been rewritten. Render again.")
+}
 ```
 
 ::: {.callout-warning}
 ## Preliminary and exploratory
 
-This is an exploratory prototype analysis. It looks at the potential of using emLab's land-use model to forecast the ILUC impacts of increasing biofuel demand, using ICCT's projected marine vegetable-oil demand as a test case. Its results provide a first look at the likely scale of these impacts, and can be compared with published ILUC values. However, they should not be used as an ILUC factor for policy, regulation, or carbon accounting, as a forecast of vegetable-oil prices, or to attribute emissions to specific countries.
+This is an exploratory prototype analysis. It looks at the potential of using emLab's land-use model to forecast the ILUC impacts of increasing biofuel demand, using ICCT's projected vegetable-oil demand for marine biofuel as a test case. Its results provide a first look at the likely scale of these impacts, and can be compared with published ILUC values. However, they should not be used as an ILUC factor for policy, regulation, or carbon accounting, as a forecast of vegetable-oil prices, or to attribute emissions to specific countries.
 
 The main caveats are:
 
-- The price shock, which drives all of the results that follow, comes from a simple formula that is meant for small changes in demand. However, marine demand would equal `r fmt0(shock_2035$demand_share_pct)`% of current world vegetable-oil production. The formula also uses Roberts & Schlenker's supply and demand elasticities, which were estimated for staple crops rather than vegetable oils.
+- The price shock, which drives all of the results that follow, comes from a simple formula that is meant for small changes in demand. However, vegetable-oil demand for marine biofuel would equal `r fmt0(shock_2035$demand_share_pct)`% of current world vegetable-oil production. The formula also uses Roberts & Schlenker's supply and demand elasticities, which were estimated for staple crops rather than vegetable oils.
 - The price shock raises the palm oil price to `r fmt1(1 + shock_2035$pct_delta_p_rs / 100)` times its 2020 level. Since the land-use model was estimated using 2001–2020 data, its response at prices this high is untested. The model also predicts forest clearing but not what the cleared land is then used for, and we count all of the additional clearing as ILUC.
 - Country-level results are the least reliable part of the analysis. We apply the same world price change in every country, and the land-use model's broad crop zones shift some of the palm response to Central Africa.
 - We only count carbon in forest biomass (i.e., not peat or soil carbon), and the model does not include rapeseed or sunflower. Both of these make our ILUC values too low. On the other hand, we make no adjustment for the value of soybean meal, which makes them too high.
@@ -135,108 +180,87 @@ For comparison, ICCT has previously used an ILUC value of 62 g CO₂e/MJ [@sturr
 
 Overall, this prototype shows that emLab's land-use model can be used to estimate the ILUC impacts of increasing biofuel demand, and that it produces values on a similar scale to published estimates. However, the results depend heavily on the price shock, and the country-level results in particular should be interpreted with caution.
 
+## Approach {#sec-approach}
+
+Indirect land-use change (ILUC) occurs when biofuel demand raises crop prices, and these higher prices lead to forest being cleared for farmland elsewhere. These emissions fall outside of the fuel's own supply chain, so a fuel mix can meet the framework's greenhouse-gas intensity targets on paper while still adding emissions that are not counted. @fig-steps shows how we estimate these emissions, and who supplies each step.
+
+```{mermaid}
+%%| label: fig-steps
+%%| fig-cap: "From the IMO Net-Zero Framework to an ILUC carbon intensity: the steps, and who supplies each."
+flowchart LR
+  A["IMO Net-Zero Framework"] --> F["Marine VO-RD demand<br/><i>ICCT cost-optimization</i>"]
+  F --> B["Virgin vegetable-oil demand<br/><i>1.22 kg oil per kg RD</i>"]
+  B --> C["Vegetable-oil price shock<br/><i>this report</i>"]
+  C --> D["Forest loss by country<br/><i>emLab land-use model</i>"]
+  D --> E["ILUC carbon intensity<br/><i>this report</i>"]
+```
+
+The analysis consists of five steps:
+
+1. Translate ICCT's 2035 vegetable-oil demand into a price shock, using Roberts & Schlenker's central supply and demand elasticities.
+2. Translate the price shock into prices for the emLab model's crops.
+3. Run the model with baseline prices and with shocked prices (both with a carbon price of zero), and take the difference in forest loss.
+4. Spread the additional emissions over the fuel used, giving a value in g CO₂ per MJ.
+5. For the sensitivity analysis, repeat steps 1–4 using the low and high ends of Roberts & Schlenker's estimates.
+
+Similar to Chen et al., we estimate how much the demand shift raises prices, and then use an econometric land-use model to translate prices into forest loss. This differs from approaches that assume a fixed ILUC factor. [Appendix A](#background) provides more background on the IMO Net-Zero Framework and published ILUC estimates, and [Appendix B](#methods-and-assumptions) describes each step in detail.
+
 ## Results
 
-Each step of the analysis is described in more detail in the [Methods and assumptions](#methods-and-assumptions) section.
+This section presents the results in the same order as the steps of the analysis. We first show how ICCT's projected vegetable-oil demand for marine biofuel translates into a vegetable-oil price shock. We then show the additional forest loss that this price shock causes in emLab's land-use model, globally and by country and crop, in terms of both carbon and forest area. Finally, we convert the additional forest carbon loss into an ILUC carbon intensity for VO-RD, and show how this value changes in our sensitivity analysis.
 
 ### Vegetable-oil price shock {#sec-results-price}
 
-```{r}
-#| label: tbl-price-shock-check
-
-# Q0 (tbl-q0 chunk) in billion liters at 0.92 kg/L, ICCT's own soy-oil conversion
-# (12.4 Mt = 13.5 billion L, ICCT Table A1).
-oil_density_kg_l <- 0.92
-q0_billion_liters <- q0_mt / oil_density_kg_l # ~221 billion L
-
-# %ΔP_t = (D_t / Q0) * M, as a percent, with the central multiplier and at the low and high ends.
-# beyond_marginal flags years where the shift exceeds 25% of the market, outside the regime where
-# the approximation is reliable.
-price_shock <- icct_table_1 |>
-  dplyr::transmute(
-    year,
-    vo_demand_billion_liters,
-    demand_share_pct = 100 * vo_demand_billion_liters / q0_billion_liters,
-    pct_delta_p_rs = demand_share_pct * m_rs,
-    pct_delta_p_rs_low = demand_share_pct * rs_low$m,
-    pct_delta_p_rs_high = demand_share_pct * rs_high$m,
-    beyond_marginal = demand_share_pct > 25
-  )
-share_2035 <- price_shock$demand_share_pct[price_shock$year == 2035]
-
-# Check: Roberts & Schlenker's ethanol mandate used about 5% of world calories (p. 2277), which they
-# estimate raised prices about 30% (p. 2280). The formula should recover that from their elasticities.
-ethanol_shift_pct <- 5
-rs_table <- rbind(
-  data.frame(spec = "Central values (primary scenario)", eps_s = eps_s_rs, eps_d = eps_d_rs, m = m_rs),
-  rs_specs
-)
-rs_table$spec <- ifelse(
-  rs_table$spec == rs_low$spec, paste(rs_table$spec, "(low end)"),
-  ifelse(rs_table$spec == rs_high$spec, paste(rs_table$spec, "(high end)"), rs_table$spec)
-)
-
-knitr::kable(
-  data.frame(
-    "Specification" = rs_table$spec,
-    "Supply elasticity" = fmt_el(rs_table$eps_s),
-    "Demand elasticity" = fmt_el(rs_table$eps_d),
-    "Multiplier M" = formatC(rs_table$m, format = "f", digits = 2),
-    "Ethanol mandate: %ΔP from a 5% shift" = paste0(fmt0(ethanol_shift_pct * rs_table$m), "%"),
-    "Marine demand: %ΔP in 2035" = paste0(fmt0(share_2035 * rs_table$m), "%"),
-    check.names = FALSE
-  ),
-  align = "lrrrrr",
-  caption = paste(
-    "Roberts & Schlenker's six specifications [@roberts2013, Table 1, p. 2279] and the central values we",
-    "use, about their average. The ethanol column checks the formula: their ethanol mandate used about 5%",
-    "of world calories [@roberts2013, p. 2277], which they estimate raised prices about 30%",
-    "[@roberts2013, p. 2280]. The low and high ends, the specifications with the smallest and largest",
-    "multiplier, are our sensitivity runs."
-  )
-)
-```
-
-```{r}
-#| label: tbl-price-shock
-
-knitr::kable(
-  price_shock |>
-    dplyr::mutate(beyond_marginal = ifelse(beyond_marginal, "yes", "")),
-  digits = 1,
-  col.names = c(
-    "Year",
-    "VO demand (billion L)",
-    "Share of market (%)",
-    "%ΔP, central",
-    "%ΔP, low end",
-    "%ΔP, high end",
-    "Beyond marginal"
-  ),
-  caption = paste(
-    "Vegetable-oil price shock from marine biofuel demand, with Roberts & Schlenker's central elasticities",
-    "and at the low and high ends of their estimates. Years marked 'beyond marginal' are outside the range",
-    "where the linear approximation holds up."
-  )
-)
-```
+ICCT projects that virgin vegetable-oil demand for marine biofuel starts in `r min(price_shock$year[price_shock$vo_demand_billion_liters > 0])` and grows to `r fmt0(shock_2035$vo_demand_billion_liters)` billion liters by 2035 (@fig-price-shock, left). By 2035, this is equal to `r fmt0(shock_2035$demand_share_pct)`% of current world production of the four major vegetable oils. Using Roberts & Schlenker's central elasticities, this demand raises vegetable-oil prices by `r fmt0(shock_2035$pct_delta_p_rs)`% in 2035 (@fig-price-shock, right). At the low and high ends of their estimates, the 2035 price shock ranges from `r fmt0(shock_2035$pct_delta_p_rs_low)`% to `r fmt0(shock_2035$pct_delta_p_rs_high)`%. From `r min(price_shock$year[price_shock$beyond_marginal])` onward, this demand is more than 25% of the market, which is beyond the range where the simple price-shock formula is reliable.
 
 ```{r}
 #| label: fig-price-shock
-#| fig-width: 7.5
-#| fig-height: 4
-#| fig-cap: "The price shock implied by each year's marine vegetable-oil demand, with Roberts & Schlenker's central elasticities (line) and between the low and high ends of their estimates (band). The land-use runs use the 2035 values."
+#| column: body-outset
+#| fig-width: 10
+#| fig-height: 4.2
+#| fig-cap: "Vegetable oil for marine biofuel projected by ICCT (left) and the resulting change in vegetable-oil prices (right), by year. Bar labels give demand as a share of current world production of the four major vegetable oils. The price change uses Roberts & Schlenker's central elasticities (line), and the band spans the low and high ends of their estimates. The land-use model runs use the 2035 values."
 
-ggplot2::ggplot(price_shock, ggplot2::aes(year, pct_delta_p_rs)) +
-  ggplot2::geom_ribbon(ggplot2::aes(ymin = pct_delta_p_rs_low, ymax = pct_delta_p_rs_high), fill = col_range, alpha = 0.6) +
-  ggplot2::geom_line(colour = col_primary, linewidth = 0.8) +
-  ggplot2::geom_point(shape = 21, size = 2.8, stroke = 0.8, colour = col_surface, fill = col_primary) +
-  ggplot2::scale_y_continuous(labels = scales::label_comma(suffix = "%")) +
+# Two panels sharing the year axis: demand (bars) and the price change it implies (line and band).
+panel_names <- c(
+  "Vegetable oil for marine biofuel (billion L a year)",
+  "Change in vegetable-oil price (%)"
+)
+demand_panel <- price_shock |>
+  dplyr::transmute(
+    year,
+    panel = factor(panel_names[1], levels = panel_names),
+    value = vo_demand_billion_liters,
+    label = ifelse(value > 0, paste0(fmt0(demand_share_pct), "%"), "")
+  )
+price_panel <- price_shock |>
+  dplyr::transmute(
+    year,
+    panel = factor(panel_names[2], levels = panel_names),
+    value = pct_delta_p_rs,
+    low = pct_delta_p_rs_low,
+    high = pct_delta_p_rs_high
+  )
+
+ggplot2::ggplot(mapping = ggplot2::aes(year, value)) +
+  ggplot2::geom_col(data = demand_panel, fill = col_primary, width = 0.65) +
+  ggplot2::geom_text(
+    data = demand_panel, ggplot2::aes(label = label),
+    vjust = -0.5, size = 3.1, colour = "#0b0b0b"
+  ) +
+  ggplot2::geom_ribbon(data = price_panel, ggplot2::aes(ymin = low, ymax = high), fill = col_range, alpha = 0.6) +
+  ggplot2::geom_line(data = price_panel, colour = col_primary, linewidth = 0.8) +
+  ggplot2::geom_point(
+    data = price_panel, shape = 21, size = 2.8, stroke = 0.8,
+    colour = col_surface, fill = col_primary
+  ) +
+  ggplot2::facet_wrap(ggplot2::vars(panel), scales = "free_y") +
+  ggplot2::coord_cartesian(clip = "off") + # keeps the 2028 point at 0% from being cut in half
+  ggplot2::scale_y_continuous(labels = scales::label_comma(), expand = ggplot2::expansion(mult = c(0, 0.1))) +
   ggplot2::scale_x_continuous(breaks = price_shock$year) +
   ggplot2::labs(
-    title = "Vegetable-oil price shock from marine biofuel demand",
+    title = "Marine biofuel demand for vegetable oil, and the resulting price shock",
     x = NULL,
-    y = "Change in vegetable-oil price"
+    y = NULL
   ) +
   theme_report()
 ```
@@ -245,17 +269,18 @@ ggplot2::ggplot(price_shock, ggplot2::aes(year, pct_delta_p_rs)) +
 #| label: fig-market-2035
 #| fig-width: 7.5
 #| fig-height: 5
-#| fig-cap: "Roberts & Schlenker's demand curve before and after 2035 marine demand, with their supply curve, using their central elasticities. The points mark today's market and the price shock run through the model."
+#| fig-cap: "Roberts & Schlenker's demand curve for vegetable oil before and after the 2035 demand from marine biofuel, with their supply curve, using their central elasticities. Prices are shown as an index, with today's price equal to 100. The points mark today's market and the 2035 price shock run through the model, labeled with the percentage price change."
 
 # The vegetable-oil market in 2035: demand before and after ICCT's marine demand D, against supply.
-# All curves use the price-shock formula's linear approximation, %dQ = eps x %dP.
+# All curves use the price-shock formula's linear approximation, %dQ = eps x %dP. Prices are plotted
+# as an index (today = 100), i.e., 100 + %dP.
 shock_rs <- price_shock$pct_delta_p_rs[price_shock$year == 2035]
 d_mt <- price_shock$vo_demand_billion_liters[price_shock$year == 2035] * oil_density_kg_l
 extra_supply_mt <- eps_s_rs * shock_rs / 100 * q0_mt
 
 curve_names <- c(
   paste0("Demand today (ε = ", fmt_el(eps_d_rs), ")"),
-  "Demand with 2035 marine demand",
+  "Demand with 2035 marine biofuel",
   paste0("Supply (ε = ", fmt_el(eps_s_rs), ")")
 )
 p_grid <- seq(-50, 600, by = 10)
@@ -271,14 +296,14 @@ equilibria <- data.frame(
   label = c("Today", paste0("+", fmt0(shock_rs), "%"))
 )
 
-ggplot2::ggplot(market_curves, ggplot2::aes(q, p, colour = curve, linetype = curve)) +
+ggplot2::ggplot(market_curves, ggplot2::aes(q, 100 + p, colour = curve, linetype = curve)) +
   ggplot2::geom_line(linewidth = 0.8) +
   ggplot2::geom_point(
-    data = equilibria, ggplot2::aes(q, p), inherit.aes = FALSE,
+    data = equilibria, ggplot2::aes(q, 100 + p), inherit.aes = FALSE,
     shape = 21, size = 3, fill = "#0b0b0b", colour = col_surface, stroke = 0.8
   ) +
   ggplot2::geom_text(
-    data = equilibria, ggplot2::aes(q, p, label = label), inherit.aes = FALSE,
+    data = equilibria, ggplot2::aes(q, 100 + p, label = label), inherit.aes = FALSE,
     hjust = -0.3, size = 3.4, colour = "#0b0b0b"
   ) +
   ggplot2::scale_colour_manual(
@@ -286,67 +311,22 @@ ggplot2::ggplot(market_curves, ggplot2::aes(q, p, colour = curve, linetype = cur
     name = NULL
   ) +
   ggplot2::scale_linetype_manual(values = stats::setNames(c("22", "solid", "solid"), curve_names), name = NULL) +
-  ggplot2::scale_y_continuous(labels = scales::label_comma(suffix = "%")) +
+  ggplot2::scale_y_continuous(labels = scales::label_comma(), breaks = seq(100, 700, 100)) +
   ggplot2::scale_x_continuous(breaks = seq(150, 350, 50)) +
-  ggplot2::coord_cartesian(xlim = c(130, 360), ylim = c(-50, 600), expand = FALSE) +
+  ggplot2::coord_cartesian(xlim = c(130, 360), ylim = c(50, 700), expand = FALSE) +
   ggplot2::labs(
     title = "The world vegetable-oil market in 2035",
     x = "Vegetable oil (Mt a year)",
-    y = "Change in vegetable-oil price"
+    y = "Vegetable-oil price (index, today = 100)"
   ) +
   theme_report()
 ```
 
-@fig-market-2035 shows the 2035 vegetable-oil market, including Roberts & Schlenker's demand curve before and after ICCT's `r fmt0(d_mt)` Mt of marine demand, as well as their supply curve. Prices rise until the additional supply and the reduced consumption by other buyers together cover the demand from ships. This requires a price increase of `r fmt0(shock_rs)`%, which adds `r fmt0(extra_supply_mt)` Mt per year of supply and reduces other buyers' consumption by `r fmt0(d_mt - extra_supply_mt)` Mt. Note that this is not a forecast. The demand shift is far outside the range where the linear formula holds, and with elasticities this small, the result depends mostly on the assumed shape of the curves. Across Roberts & Schlenker's six specifications, the multiplier ranges from `r fmt1(rs_low$m)` to `r fmt1(rs_high$m)`, which puts the price shock between `r fmt0(share_2035 * rs_low$m)`% and `r fmt0(share_2035 * rs_high$m)`% (@tbl-price-shock-check).
-
-The land-use model runs use the 2035 values.
-
-```{r}
-#| label: export-price-shock
-
-# Hand-off to the land-use model (full precision, no rounding). 01_prepare_data.R reads
-# vegetable_oil_price_shock_2035.csv: the central shock and the low and high ends of Roberts &
-# Schlenker's estimates. The central elasticities are saved alongside.
-handoff_2035 <- price_shock |>
-  dplyr::filter(year == 2035) |>
-  dplyr::mutate(eps_s = eps_s_rs, eps_d = eps_d_rs)
-
-dir.create(file.path("data", "derived"), showWarnings = FALSE, recursive = TRUE)
-utils::write.csv(
-  handoff_2035,
-  file.path("data", "derived", "vegetable_oil_price_shock_2035.csv"),
-  row.names = FALSE
-)
-utils::write.csv(
-  price_shock,
-  file.path("data", "derived", "vegetable_oil_price_shock.csv"),
-  row.names = FALSE
-)
-
-# The setup chunk read this file for the text above, before this render rewrote it. If it was out
-# of date, that text used old numbers: stop so the report is rendered again.
-if (!isTRUE(all.equal(shock_2035, as.data.frame(handoff_2035), check.attributes = FALSE))) {
-  stop("vegetable_oil_price_shock_2035.csv was out of date and has been rewritten. Render again.")
-}
-
-cat(sprintf(
-  paste0(
-    "2035: VO demand %.0f billion L on a Q0 of %.0f billion L (demand share %.0f%%).\n",
-    "Roberts & Schlenker: multiplier %.2f, price shock +%.0f%% (low end +%.0f%%, high end +%.0f%%)."
-  ),
-  handoff_2035$vo_demand_billion_liters,
-  q0_billion_liters,
-  handoff_2035$demand_share_pct,
-  m_rs,
-  handoff_2035$pct_delta_p_rs,
-  handoff_2035$pct_delta_p_rs_low,
-  handoff_2035$pct_delta_p_rs_high
-))
-```
+@fig-market-2035 shows the 2035 vegetable-oil market, including Roberts & Schlenker's demand curve before and after the `r fmt0(d_mt)` Mt of vegetable oil that ICCT projects for marine biofuel in 2035, as well as their supply curve. Prices rise until the additional supply and the reduced consumption by other buyers together cover the demand from ships. This requires a price increase of `r fmt0(shock_rs)`%, which adds `r fmt0(extra_supply_mt)` Mt per year of supply and reduces other buyers' consumption by `r fmt0(d_mt - extra_supply_mt)` Mt. Note that this is not a forecast. The demand shift is far outside the range where the linear formula holds, and with elasticities this small, the result depends mostly on the assumed shape of the curves. Across Roberts & Schlenker's six specifications, the multiplier ranges from `r fmt1(rs_low$m)` to `r fmt1(rs_high$m)`, which puts the price shock between `r fmt0(share_2035 * rs_low$m)`% and `r fmt0(share_2035 * rs_high$m)`% (@tbl-price-shock-check). We use these 2035 price shocks as the inputs to the land-use model runs in the next section.
 
 ### Forest loss {#sec-results-forest}
 
-Additional forest loss is the difference in forest between the BAU run and the shocked run. Since it is cumulative, the final model year gives the total over the entire simulation.
+We run emLab's land-use model with and without the 2035 price shock, and compare the two runs. Additional forest loss is the difference in forest between the BAU run and the shocked run. Since it is cumulative, the final model year gives the total over the entire simulation.
 
 ```{r}
 #| label: tbl-forest-loss-global
@@ -821,7 +801,19 @@ Across Roberts & Schlenker's six specifications, the `r headline_years`-year ILU
 
 This range only captures the spread across Roberts & Schlenker's specifications. It does not capture the other uncertainties described in the [Caveats](#sec-caveats) section, such as the linear approximation, the use of staple-crop elasticities for vegetable oils, and the carbon pools we do not count.
 
-## Background
+## Caveats {#sec-caveats}
+
+- The price shock comes from a linear approximation applied to a demand shift equal to `r fmt0(shock_2035$demand_share_pct)`% of the market, so the true price response is probably larger. In addition, Roberts & Schlenker's elasticities are for staple calories (i.e., maize, wheat, rice, and soybeans), rather than vegetable oils.
+- The price shock takes its supply response from Roberts & Schlenker, which includes every source of additional supply (e.g., higher yields, other crops, and new farmland regardless of whether it was previously forest). However, the emLab model translates prices into forest clearing only, so we do not count any land-use change outside of forests.
+- The primary price shock raises the palm oil price to `r fmt1(1 + shock_2035$pct_delta_p_rs / 100)` times its 2020 level. The emLab model was estimated using 2001–2020 data, so its response at prices this high is untested.
+- The model predicts forest clearing, but not what the cleared land is used for. We count all of the additional clearing as ILUC.
+- Country-level results are the weakest part of the analysis. The same world price change applies everywhere, as if supply and the pass-through of world prices to farmers were the same in every country. Country effects are held at their 2016–2020 average, and some small neighboring countries are pooled into regions. In addition, each grid cell's revenue weights crops by the crop mix of its broad agro-ecological zone, rather than the cell's own crop mix. This reduces the palm response in palm frontiers such as Sumatra and Borneo and spreads it into Central Africa, which likely explains why the Democratic Republic of the Congo ranks first.
+- We only count forest biomass carbon, and not peat, soil carbon, or lost future sequestration. Peat alone accounted for 614 of the 1,086 Tg CO₂e in Chen et al.'s estimate [@chen2026, Table 1, p. 13], mostly in Indonesia and Malaysia. Rapeseed and sunflower are also not included in the model. Both of these omissions understate ILUC.
+- The soybean price change uses an accounting share (0.353), rather than an estimated market response. The oil price shock also makes no adjustment for soybean meal, which overstates the shock.
+- Prices jump once and stay at that level, and cleared forest never grows back ([Appendix B](#sec-land-use-model)).
+- Our sensitivity analysis only captures the spread across Roberts & Schlenker's six specifications, and does not capture the other uncertainties listed above.
+
+## Appendix A: Background {#background}
 
 ### The IMO Net-Zero Framework
 
@@ -833,7 +825,7 @@ The working group meets again 23–27 November, followed by MEPC 85 (30 November
 
 The framework only considers the direct life-cycle emissions of fuels. The IMO's life-cycle guidelines consider ILUC too uncertain to assign each fuel a value, and instead handle it through a qualitative, risk-based approach [@imo2024lca, paras. 4.12–4.13]. MEPC 84 supported this approach in principle and asked for more quantitative analysis by MEPC 85 [@abs2026mepc84, p. 6]. Since blending biofuel costs less than the \$380 Tier 2 penalty, the least-cost strategy is to blend just enough biofuel to meet the Base target. In ICCT's least-cost mix, used-cooking-oil renewable diesel (UCO-RD) runs out at about 5% of shipping energy, and virgin vegetable-oil renewable diesel (VO-RD) covers the rest, reaching 46% of shipping energy by 2035 [@seber2025, p. 4 and Table 1, p. 5].
 
-ICCT's Table 1 gives the fuel mix for each year from 2028 to 2035. We read this table directly from the ICCT PDF. Its last column, virgin vegetable-oil feedstock, is the demand shift we use in this analysis.
+ICCT's Table 1 gives the fuel mix for each year from 2028 to 2035. We read this table directly from the ICCT PDF. Its last column, virgin vegetable-oil feedstock, is the demand shift we use in this analysis. ICCT converts renewable diesel to vegetable oil at a rate of 1.22 kg of oil per kg of fuel [@seber2025, p. 3, note 9].
 
 ```{r}
 #| label: tbl-icct-table-1
@@ -876,22 +868,7 @@ knitr::kable(
 
 : Direct life-cycle carbon intensities used by ICCT: 2008 baseline (p. 1); fossil LNG, 85.65 (p. 2); and HFO, 92.78, soy VO-RD, soy FAME (35.74), and UCO-RD (p. 6) [@seber2025]. None of these values include indirect land-use change. {#tbl-direct-ci}
 
-### Indirect land-use change
-
-Indirect land-use change (ILUC) occurs when biofuel demand raises crop prices, and these higher prices lead to forest being cleared for farmland elsewhere. These emissions fall outside of the fuel's own supply chain, so a fuel mix can meet the GFI targets on paper while still adding emissions that are not counted. @fig-steps shows the steps in our analysis.
-
-```{mermaid}
-%%| label: fig-steps
-%%| fig-cap: "From the IMO Net-Zero Framework to an ILUC carbon intensity: the steps, and who supplies each."
-flowchart LR
-  A["IMO Net-Zero Framework"] --> F["Marine VO-RD demand<br/><i>ICCT cost-optimization</i>"]
-  F --> B["Virgin vegetable-oil demand<br/><i>1.22 kg oil per kg RD</i>"]
-  B --> C["Vegetable-oil price shock<br/><i>this report</i>"]
-  C --> D["Forest loss by country<br/><i>emLab land-use model</i>"]
-  D --> E["ILUC carbon intensity<br/><i>this report</i>"]
-```
-
-ICCT converts renewable diesel to vegetable oil at a rate of 1.22 kg of oil per kg of fuel [@seber2025, p. 3, note 9].
+### Published ILUC estimates
 
 Published ILUC estimates for vegetable-oil biofuels vary widely (@tbl-published-iluc).
 
@@ -904,17 +881,9 @@ Published ILUC estimates for vegetable-oil biofuels vary widely (@tbl-published-
 
 : ICCT takes its 62 g CO₂e/MJ value from the EPA model comparison [@sturrup2026, p. 10]. The only value of 62 in the EPA's results table is GCAM's land-use-change value, which is in kg CO₂e/MMBTU (≈ 59 g CO₂e/MJ), so we assume this is the source. Every value here is ILUC alone, without the fuel's direct emissions. ICCT adds its 62, weighted by VO-RD's share of shipping energy (62 × 46% ≈ 28.5 g CO₂e/MJ in 2035), to the fleet's Base-target GFI [@sturrup2026, pp. 10–11]. This puts the ILUC-adjusted fleet GFI at 93.86 g CO₂e/MJ in 2035, which is above the fossil baseline [@sturrup2026, Table A1, p. 15]. {#tbl-published-iluc}
 
-Similar to Chen et al., we estimate how much the demand shift raises prices, and then use an econometric land-use model to translate prices into forest loss. This differs from approaches that assume a fixed ILUC factor.
+## Appendix B: Methods and assumptions {#methods-and-assumptions}
 
-## Methods and assumptions
-
-The analysis consists of five steps:
-
-1. Translate ICCT's 2035 vegetable-oil demand into a price shock, using Roberts & Schlenker's central supply and demand elasticities.
-2. Translate the price shock into prices for the emLab model's crops.
-3. Run the model with baseline prices and with shocked prices (both with a carbon price of zero), and take the difference in forest loss.
-4. Spread the additional emissions over the fuel used, giving a value in g CO₂ per MJ.
-5. For the sensitivity analysis, repeat steps 1–4 using the low and high ends of Roberts & Schlenker's estimates.
+This appendix describes each step of the analysis (@fig-steps) in more detail.
 
 ### From demand to a price shock {#sec-price-shock}
 
@@ -922,11 +891,11 @@ When demand shifts outward, the price rises by roughly the size of the demand sh
 
 $$ \%\Delta P \;\approx\; \underbrace{\frac{D}{Q_0}}_{\text{demand shift}} \;\times\; \underbrace{\frac{1}{\varepsilon_s - \varepsilon_d}}_{\text{multiplier } M} $$
 
-where $D$ is marine virgin vegetable-oil demand and $Q_0$ is baseline world production. The supply elasticity $\varepsilon_s > 0$ is the percentage increase in production when prices rise by 1%, and the demand elasticity $\varepsilon_d < 0$ is the percentage change in consumption. The multiplier $M$ is the percentage price increase for each percentage point of demand shift. The less that supply and demand respond to price, the larger the multiplier.
+where $D$ is virgin vegetable-oil demand for marine biofuel and $Q_0$ is baseline world production. The supply elasticity $\varepsilon_s > 0$ is the percentage increase in production when prices rise by 1%, and the demand elasticity $\varepsilon_d < 0$ is the percentage change in consumption. The multiplier $M$ is the percentage price increase for each percentage point of demand shift. The less that supply and demand respond to price, the larger the multiplier.
 
 | Input | Value | Source |
 |---|---|---|
-| Marine virgin vegetable-oil demand, 2035 ($D$) | 139.3 billion L | ICCT [@seber2025, Table 1, p. 5] |
+| Virgin vegetable-oil demand for marine biofuel, 2035 ($D$) | 139.3 billion L | ICCT [@seber2025, Table 1, p. 5] |
 | Baseline market ($Q_0$) | ≈ 204 Mt: world production of palm, soybean, rapeseed and sunflowerseed oil, 2024/25 | USDA Production, Supply and Distribution (PSD) database [@usdapsd] |
 | Oil density, to put $D$ and $Q_0$ in the same units | 0.92 kg/L | ICCT's own soy-oil conversion: 12.4 Mt = 13.5 billion L (0.919 kg/L) [@seber2025, Table A1, p. 7] |
 | Supply elasticity ($\varepsilon_s$) | `r fmt_el(eps_s_rs)` (low end `r fmt_el(rs_low$eps_s)`, high end `r fmt_el(rs_high$eps_s)`) | @roberts2013 [Table 1, p. 2279]: about the average of their six specifications, which range from `r fmt_el(min(rs_specs$eps_s))` to `r fmt_el(max(rs_specs$eps_s))` |
@@ -959,10 +928,71 @@ Some notes on these choices:
 - Vegetable oils substitute for one another, so we treat them as a single market, even though ships would burn soy oil [@chen2026, p. 4]. Roberts & Schlenker's elasticities describe the world market for calories from maize, wheat, rice, and soybeans, and we use them as a proxy for vegetable oils.
 - Roberts & Schlenker estimate supply and demand together using six specifications: instrumental variables (IV) and three-stage least squares (3SLS), each with 3, 4, or 5 spline knots [@roberts2013, Table 1, p. 2279]. For the sensitivity analysis, we rerun everything with the two specifications that give the smallest and largest multiplier. We keep each specification's supply and demand elasticities together, rather than pairing the extremes of each range (@tbl-price-shock-check).
 - We keep the supply elasticity in the multiplier because the emLab model takes prices as given, so the price we provide should already reflect the supply response. Dropping the supply elasticity would give $M = 20$ and triple the price shock.
-- The formula is a linear approximation, and marine demand becomes a large share of the market from about 2032 onward. The 2035 price shock should therefore be interpreted as the likely scale of the effect, rather than its exact size. Roberts & Schlenker also note that, when accounting for uncertainty in the elasticities, the expected multiplier is higher than the one from their central estimates [@roberts2013, p. 2280].
+- The formula is a linear approximation, and vegetable-oil demand for marine biofuel becomes a large share of the market from about 2032 onward. The 2035 price shock should therefore be interpreted as the likely scale of the effect, rather than its exact size. Roberts & Schlenker also note that, when accounting for uncertainty in the elasticities, the expected multiplier is higher than the one from their central estimates [@roberts2013, p. 2280].
 - Roberts & Schlenker's supply elasticity is the output response to the price expected at planting, one year ahead. They argue it is not just a short-run lower bound, because farmers expect price changes to persist [@roberts2013, p. 2285]. Oil palm, however, takes about four years to start producing fruit [@chen2026, p. 4].
 - Crushing soybeans also produces meal, and meal revenue relieves some of the pressure on oil prices. Roberts & Schlenker reduce their price effect by a third when a third of the calories return as animal feed [@roberts2013, p. 2280]. We do not make this adjustment, so our price shock is too high in this respect.
 - Using Roberts & Schlenker's elasticities, the formula reproduces their headline price effect (@tbl-price-shock-check).
+
+@tbl-price-shock-check shows Roberts & Schlenker's six specifications and the resulting multipliers, and @tbl-price-shock shows the price shock for each year from 2028 to 2035.
+
+```{r}
+#| label: tbl-price-shock-check
+# Check: Roberts & Schlenker's ethanol mandate used about 5% of world calories (p. 2277), which they
+# estimate raised prices about 30% (p. 2280). The formula should recover that from their elasticities.
+ethanol_shift_pct <- 5
+rs_table <- rbind(
+  data.frame(spec = "Central values (primary scenario)", eps_s = eps_s_rs, eps_d = eps_d_rs, m = m_rs),
+  rs_specs
+)
+rs_table$spec <- ifelse(
+  rs_table$spec == rs_low$spec, paste(rs_table$spec, "(low end)"),
+  ifelse(rs_table$spec == rs_high$spec, paste(rs_table$spec, "(high end)"), rs_table$spec)
+)
+
+knitr::kable(
+  data.frame(
+    "Specification" = rs_table$spec,
+    "Supply elasticity" = fmt_el(rs_table$eps_s),
+    "Demand elasticity" = fmt_el(rs_table$eps_d),
+    "Multiplier M" = formatC(rs_table$m, format = "f", digits = 2),
+    "Ethanol mandate: %ΔP from a 5% shift" = paste0(fmt0(ethanol_shift_pct * rs_table$m), "%"),
+    "Marine biofuel: %ΔP in 2035" = paste0(fmt0(share_2035 * rs_table$m), "%"),
+    check.names = FALSE
+  ),
+  align = "lrrrrr",
+  caption = paste(
+    "Roberts & Schlenker's six specifications [@roberts2013, Table 1, p. 2279] and the central values we",
+    "use, about their average. The ethanol column checks the formula: their ethanol mandate used about 5%",
+    "of world calories [@roberts2013, p. 2277], which they estimate raised prices about 30%",
+    "[@roberts2013, p. 2280]. The low and high ends, the specifications with the smallest and largest",
+    "multiplier, are our sensitivity runs."
+  )
+)
+```
+
+```{r}
+#| label: tbl-price-shock
+
+knitr::kable(
+  price_shock |>
+    dplyr::mutate(beyond_marginal = ifelse(beyond_marginal, "yes", "")),
+  digits = 1,
+  col.names = c(
+    "Year",
+    "VO demand (billion L)",
+    "Share of market (%)",
+    "%ΔP, central",
+    "%ΔP, low end",
+    "%ΔP, high end",
+    "Beyond marginal"
+  ),
+  caption = paste(
+    "Vegetable-oil price shock from marine biofuel demand, with Roberts & Schlenker's central elasticities",
+    "and at the low and high ends of their estimates. Years marked 'beyond marginal' are outside the range",
+    "where the linear approximation holds up."
+  )
+)
+```
 
 ### Mapping the shock to the model's crops {#sec-mapping}
 
@@ -1007,18 +1037,6 @@ where $\Delta C(T)$ is the cumulative additional forest carbon loss $T$ years af
 There is no standard value for $T$. The EU uses 20 years [@valin2015, p. 3] and the US EPA uses 30 years [@chen2026, p. 13]. We report 20, 25, and 30 years, and use 25 years for our headline value. This is the period Chen et al. use to match the oil palm replanting cycle [@chen2026, p. 13], so our value can be compared directly with their 84.1 g CO₂e/MJ. ICCT's 62 g CO₂e/MJ comes from the EPA's model comparison, which divides cumulative 2020–2050 emissions by cumulative fuel use over the same years [@epa2023mce, pp. 83–84], so it is most comparable to our 30-year value.
 
 The result only counts CO₂ from forest biomass. We split it by country using each country's share of the additional loss, and by crop using the palm-only and soy-only runs.
-
-## Caveats {#sec-caveats}
-
-- The price shock comes from a linear approximation applied to a demand shift equal to `r fmt0(shock_2035$demand_share_pct)`% of the market, so the true price response is probably larger. In addition, Roberts & Schlenker's elasticities are for staple calories (i.e., maize, wheat, rice, and soybeans), rather than vegetable oils.
-- The price shock takes its supply response from Roberts & Schlenker, which includes every source of additional supply (e.g., higher yields, other crops, and new farmland regardless of whether it was previously forest). However, the emLab model translates prices into forest clearing only, so we do not count any land-use change outside of forests.
-- The primary price shock raises the palm oil price to `r fmt1(1 + shock_2035$pct_delta_p_rs / 100)` times its 2020 level. The emLab model was estimated using 2001–2020 data, so its response at prices this high is untested.
-- The model predicts forest clearing, but not what the cleared land is used for. We count all of the additional clearing as ILUC.
-- Country-level results are the weakest part of the analysis. The same world price change applies everywhere, as if supply and the pass-through of world prices to farmers were the same in every country. Country effects are held at their 2016–2020 average, and some small neighboring countries are pooled into regions. In addition, each grid cell's revenue weights crops by the crop mix of its broad agro-ecological zone, rather than the cell's own crop mix. This reduces the palm response in palm frontiers such as Sumatra and Borneo and spreads it into Central Africa, which likely explains why the Democratic Republic of the Congo ranks first.
-- We only count forest biomass carbon, and not peat, soil carbon, or lost future sequestration. Peat alone accounted for 614 of the 1,086 Tg CO₂e in Chen et al.'s estimate [@chen2026, Table 1, p. 13], mostly in Indonesia and Malaysia. Rapeseed and sunflower are also not included in the model. Both of these omissions understate ILUC.
-- The soybean price change uses an accounting share (0.353), rather than an estimated market response. The oil price shock also makes no adjustment for soybean meal, which overstates the shock.
-- Prices jump once and stay at that level, and cleared forest never grows back ([Methods](#sec-land-use-model)).
-- Our sensitivity analysis only captures the spread across Roberts & Schlenker's six specifications, and does not capture the other uncertainties listed above.
 
 ## Use of generative AI
 
