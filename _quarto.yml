@@ -9,7 +9,7 @@ project:
     - technical-notes.qmd
 
 website:
-  title: "Marine Biofuel ILUC Prototype"
+  title: "Marine Biofuel Indirect Land-Use Change Prototype"
   # No site search: it would index the technical notes and make them findable from the report.
   search: false
   navbar:

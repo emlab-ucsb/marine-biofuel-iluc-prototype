@@ -1,5 +1,5 @@
 ---
-title: "ILUC implications of marine biofuel demand under the IMO Net-Zero Framework"
+title: "Indirect land-use change implications of marine biofuel demand under the International Maritime Organization's Net-Zero Framework"
 subtitle: "Prototype analysis: preliminary and exploratory results"
 authors: Environmental Markets Lab (emLab), University of California, Santa Barbara (UCSB). For the International Council on Clean Transportation (ICCT)
 date: today
@@ -151,7 +151,7 @@ if (!isTRUE(all.equal(shock_2035, as.data.frame(handoff_2035), check.attributes 
 ::: {.callout-warning}
 ## Preliminary and exploratory
 
-This is an exploratory prototype analysis. It looks at the potential of using emLab's land-use model to forecast the ILUC impacts of increasing biofuel demand, using ICCT's projected vegetable-oil demand for marine biofuel as a test case. Its results provide a first look at the likely scale of these impacts, and can be compared with published ILUC values. However, they should not be used as an ILUC factor for policy, regulation, or carbon accounting, as a forecast of vegetable-oil prices, or to attribute emissions to specific countries.
+This is an exploratory prototype analysis. It looks at the potential of using emLab's land-use model to forecast the indirect land-use change (ILUC) impacts of increasing biofuel demand, using ICCT's projected vegetable-oil demand for marine biofuel as a test case. Its results provide a first look at the likely scale of these impacts, and can be compared with published ILUC values. However, they should not be used as an ILUC factor for policy, regulation, or carbon accounting, as a forecast of vegetable-oil prices, or to attribute emissions to specific countries.
 
 The main caveats are:
 
@@ -166,7 +166,7 @@ The [Caveats](#sec-caveats) section provides the full list.
 
 ## Executive summary
 
-In April 2025, the International Maritime Organization (IMO) approved a draft Net-Zero Framework that would set greenhouse-gas intensity targets for the fuel used by large ships, and would charge ships that miss those targets [@sturrup2026, p. 1; @seber2025, pp. 1–2]. The framework has not yet been adopted. A vote was postponed in October 2025, and a vote could happen as soon as 4 December 2026 [@carbonbrief2026; @abs2026mepc84, p. 4]. The framework only counts the direct life-cycle emissions of fuels. Indirect land-use change (ILUC), which is the forest cleared elsewhere when biofuel demand raises crop prices, is instead handled through a qualitative approach [@imo2024lca, paras. 4.12–4.13]. ICCT projects that the least-cost compliance pathway relies heavily on renewable diesel made from virgin vegetable oil (VO-RD), which would reach 46% of shipping energy by 2035 [@seber2025, p. 4 and Table 1, p. 5].
+In April 2025, the International Maritime Organization (IMO) approved a draft Net-Zero Framework that would set greenhouse-gas intensity targets for the fuel used by large ships, and would charge ships that miss those targets [@sturrup2026, p. 1; @seber2025, pp. 1–2]. The framework has not yet been adopted. A vote was postponed in October 2025, and a vote could happen as soon as 4 December 2026 [@carbonbrief2026; @abs2026mepc84, p. 4]. The framework only counts the direct life-cycle emissions of fuels. ILUC, which is the forest cleared elsewhere when biofuel demand raises crop prices, is instead handled through a qualitative approach [@imo2024lca, paras. 4.12–4.13]. ICCT projects that the least-cost compliance pathway relies heavily on renewable diesel made from virgin vegetable oil (VO-RD), which would reach 46% of shipping energy by 2035 [@seber2025, p. 4 and Table 1, p. 5].
 
 This analysis finds a central ILUC estimate for marine VO-RD of `r fmt1(il("vo_rs", 25))` g CO₂ per MJ, when spread over `r headline_years` years of fuel use (`r fmt1(il("vo_rs", 20))` over 20 years and `r fmt1(il("vo_rs", 30))` over 30 years). Our sensitivity analysis, described below, gives a range of `r fmt1(il("vo_rs_low", 25))` to `r fmt1(il("vo_rs_high", 25))` g CO₂/MJ (@tbl-iluc-sensitivity). Adding VO-RD's direct life-cycle emissions of `r vord_direct_ci` g CO₂e/MJ [@seber2025, p. 6] gives a total of `r fmt1(vord_direct_ci + il("vo_rs", 25))` g/MJ, compared with a fossil baseline of `r fossil_baseline_ci`.
 
@@ -182,14 +182,14 @@ Overall, this prototype shows that emLab's land-use model can be used to estimat
 
 ## Approach {#sec-approach}
 
-Indirect land-use change (ILUC) occurs when biofuel demand raises crop prices, and these higher prices lead to forest being cleared for farmland elsewhere. These emissions fall outside of the fuel's own supply chain, so a fuel mix can meet the framework's greenhouse-gas intensity targets on paper while still adding emissions that are not counted. @fig-steps shows how we estimate these emissions, and who supplies each step.
+ILUC occurs when biofuel demand raises crop prices, and these higher prices lead to forest being cleared for farmland elsewhere. These emissions fall outside of the fuel's own supply chain, so a fuel mix can meet the framework's greenhouse-gas intensity targets on paper while still adding emissions that are not counted. @fig-steps shows how we estimate these emissions, and who supplies each step.
 
 ```{mermaid}
 %%| label: fig-steps
 %%| fig-cap: "From the IMO Net-Zero Framework to an ILUC carbon intensity: the steps, and who supplies each."
 flowchart LR
   A["IMO Net-Zero Framework"] --> F["Marine VO-RD demand<br/><i>ICCT cost-optimization</i>"]
-  F --> B["Virgin vegetable-oil demand<br/><i>1.22 kg oil per kg RD</i>"]
+  F --> B["Virgin vegetable-oil demand<br/><i>1.22 kg oil per kg renewable diesel</i>"]
   B --> C["Vegetable-oil price shock<br/><i>this report</i>"]
   C --> D["Forest loss by country<br/><i>emLab land-use model</i>"]
   D --> E["ILUC carbon intensity<br/><i>this report</i>"]
@@ -792,7 +792,8 @@ knitr::kable(
   caption = paste(
     "ILUC carbon intensity of VO-RD (g CO₂/MJ) with Roberts & Schlenker's central values and at the low and",
     "high ends of their estimates: the two of their six Table 1 specifications with the smallest and largest",
-    "multiplier [@roberts2013, p. 2279]. All three are run through the emLab model."
+    "multiplier [@roberts2013, p. 2279], which form the bounds of our sensitivity analysis. All three are run",
+    "through the emLab model. IV is instrumental variables and 3SLS is three-stage least squares."
   )
 )
 ```
@@ -817,9 +818,9 @@ This range only captures the spread across Roberts & Schlenker's specifications.
 
 ### The IMO Net-Zero Framework
 
-In April 2025, the International Maritime Organization approved draft amendments to MARPOL Annex VI [@sturrup2026, p. 1] that would set greenhouse-gas fuel-intensity (GFI) targets for ships of 5,000 gross tonnage and above. GFI is measured in well-to-wake g CO₂e/MJ, relative to a 2008 baseline of 93.3 [@seber2025, p. 1]. The Base target tightens from a 4% reduction in 2028 to a 30% reduction by 2035, while the stricter Direct Compliance target tightens from 17% to 43%. Ships above the Base target pay \$380 per tonne of excess CO₂e (Tier 2), and ships between the two targets pay \$100 per tonne (Tier 1) [@seber2025, pp. 1–2].
+In April 2025, the International Maritime Organization approved draft amendments to Annex VI of the International Convention for the Prevention of Pollution from Ships (MARPOL) [@sturrup2026, p. 1] that would set greenhouse-gas fuel-intensity (GFI) targets for ships of 5,000 gross tonnage and above. GFI is measured in well-to-wake g CO₂e/MJ, relative to a 2008 baseline of 93.3 [@seber2025, p. 1]. The Base target tightens from a 4% reduction in 2028 to a 30% reduction by 2035, while the stricter Direct Compliance target tightens from 17% to 43%. Ships above the Base target pay \$380 per tonne of excess CO₂e (Tier 2), and ships between the two targets pay \$100 per tonne (Tier 1) [@seber2025, pp. 1–2].
 
-As of October 2026, the framework has not been adopted. At an extraordinary session in October 2025, a Saudi Arabian motion to adjourn for one year passed with 57 votes, including 15 countries that had supported the framework in April [@carbonbrief2026]. MEPC 84 (27 April–1 May 2026) kept the April 2025 text as the basis for further work, invited alternative proposals, and scheduled two more meetings of its intersessional working group on greenhouse gases [@carbonbrief2026; @abs2026mepc84, p. 4]. The first of these meetings, ISWG-GHG 22 (1–4 September 2026), ended without agreement [@shipandbunker2026]. The largest disagreement is over the GHG price and the central IMO fund it would pay into. According to one observer's count of the countries that spoke, 38 supported the price and fund and 17 (mostly oil producers) opposed them, while the United States again rejected any IMO-run fund [@shipandbunker2026]. The early GFI trajectory and the rules for pooling compliance surpluses are also unresolved [@maritimeexecutive2026]. Japan's proposal to replace the fund with direct payments from shipowners received little support in September [@maritimeexecutive2026]. Its revised proposal drops the fund and instead has ships cover shortfalls by buying surplus units from other ships [@marineinsight2026].
+As of October 2026, the framework has not been adopted. At an extraordinary session in October 2025, a Saudi Arabian motion to adjourn for one year passed with 57 votes, including 15 countries that had supported the framework in April [@carbonbrief2026]. The IMO's Marine Environment Protection Committee (MEPC) met for its 84th session (MEPC 84) from 27 April to 1 May 2026. It kept the April 2025 text as the basis for further work, invited alternative proposals, and scheduled two more meetings of its Intersessional Working Group on Reduction of Greenhouse Gas Emissions from Ships (ISWG-GHG) [@carbonbrief2026; @abs2026mepc84, p. 4]. The first of these meetings, ISWG-GHG 22 (1–4 September 2026), ended without agreement [@shipandbunker2026]. The largest disagreement is over the greenhouse-gas (GHG) price and the central IMO fund it would pay into. According to one observer's count of the countries that spoke, 38 supported the price and fund and 17 (mostly oil producers) opposed them, while the United States again rejected any IMO-run fund [@shipandbunker2026]. The early GFI trajectory and the rules for pooling compliance surpluses are also unresolved [@maritimeexecutive2026]. Japan's proposal to replace the fund with direct payments from shipowners received little support in September [@maritimeexecutive2026]. Its revised proposal drops the fund and instead has ships cover shortfalls by buying surplus units from other ships [@marineinsight2026].
 
 The working group meets again 23–27 November, followed by MEPC 85 (30 November–3 December). If MEPC 85 agrees, the extraordinary session will resume on 4 December 2026 and could vote that day [@abs2026mepc84, p. 4; @shipandbunker2026]. Whatever is adopted may differ from the April 2025 text that this analysis is based on. For example, a less stringent early trajectory would mean less biofuel demand, and dropping the GHG price would change the compliance costs that determine the fuel mix.
 
@@ -866,7 +867,7 @@ knitr::kable(
 | Soy FAME biodiesel | 35.7 |
 | Used-cooking-oil renewable diesel (UCO-RD) | 13.1 |
 
-: Direct life-cycle carbon intensities used by ICCT: 2008 baseline (p. 1); fossil LNG, 85.65 (p. 2); and HFO, 92.78, soy VO-RD, soy FAME (35.74), and UCO-RD (p. 6) [@seber2025]. None of these values include indirect land-use change. {#tbl-direct-ci}
+: Direct life-cycle carbon intensities used by ICCT: 2008 baseline (p. 1); fossil liquefied natural gas (LNG), 85.65 (p. 2); and heavy fuel oil (HFO), 92.78, soy VO-RD, soy fatty acid methyl ester (FAME) biodiesel, 35.74, and UCO-RD (p. 6) [@seber2025]. None of these values include indirect land-use change. {#tbl-direct-ci}
 
 ### Published ILUC estimates
 
@@ -876,10 +877,10 @@ Published ILUC estimates for vegetable-oil biofuels vary widely (@tbl-published-
 |---|---|---|
 | ICCT climate & revenue brief [@sturrup2026, pp. 10–11] | Fixed factor applied to ICCT's demand projection | 62 g CO₂e/MJ; ~285 Mt CO₂e/yr by 2035; ~950 Mt CO₂e over 2028–2035 |
 | U.S. EPA model comparison [@epa2023mce, Table 7.7-1, p. 113] | Five models, soybean-oil biodiesel shock | Land-use change: 10 to 295 kg CO₂e/MMBTU (GCAM: 62) |
-| @chen2026 [Table 1, p. 13] | Econometric estimates of demand → price → deforestation for palm, 2002–2018 | 84.1 g CO₂e/MJ (90% CI 48.7–113.5) |
-| GLOBIOM for the EU [@valin2015, p. x] | Global economic land-use model, emissions spread over 20 years | 231 g CO₂e/MJ for palm oil, 150 for soybean oil |
+| @chen2026 [Table 1, p. 13] | Econometric estimates of demand → price → deforestation for palm, 2002–2018 | 84.1 g CO₂e/MJ (90% confidence interval 48.7–113.5) |
+| Global Biosphere Management Model (GLOBIOM) for the EU [@valin2015, p. x] | Global economic land-use model, emissions spread over 20 years | 231 g CO₂e/MJ for palm oil, 150 for soybean oil |
 
-: ICCT takes its 62 g CO₂e/MJ value from the EPA model comparison [@sturrup2026, p. 10]. The only value of 62 in the EPA's results table is GCAM's land-use-change value, which is in kg CO₂e/MMBTU (≈ 59 g CO₂e/MJ), so we assume this is the source. Every value here is ILUC alone, without the fuel's direct emissions. ICCT adds its 62, weighted by VO-RD's share of shipping energy (62 × 46% ≈ 28.5 g CO₂e/MJ in 2035), to the fleet's Base-target GFI [@sturrup2026, pp. 10–11]. This puts the ILUC-adjusted fleet GFI at 93.86 g CO₂e/MJ in 2035, which is above the fossil baseline [@sturrup2026, Table A1, p. 15]. {#tbl-published-iluc}
+: ICCT takes its 62 g CO₂e/MJ value from the U.S. Environmental Protection Agency (EPA) model comparison [@sturrup2026, p. 10]. The only value of 62 in the EPA's results table is the land-use-change value from the Global Change Analysis Model (GCAM), which is in kg CO₂e per million British thermal units (MMBTU) (≈ 59 g CO₂e/MJ), so we assume this is the source. Every value here is ILUC alone, without the fuel's direct emissions. ICCT adds its 62, weighted by VO-RD's share of shipping energy (62 × 46% ≈ 28.5 g CO₂e/MJ in 2035), to the fleet's Base-target GFI [@sturrup2026, pp. 10–11]. This puts the ILUC-adjusted fleet GFI at 93.86 g CO₂e/MJ in 2035, which is above the fossil baseline [@sturrup2026, Table A1, p. 15]. {#tbl-published-iluc}
 
 ## Appendix B: Methods and assumptions {#methods-and-assumptions}
 
@@ -896,7 +897,7 @@ where $D$ is virgin vegetable-oil demand for marine biofuel and $Q_0$ is baselin
 | Input | Value | Source |
 |---|---|---|
 | Virgin vegetable-oil demand for marine biofuel, 2035 ($D$) | 139.3 billion L | ICCT [@seber2025, Table 1, p. 5] |
-| Baseline market ($Q_0$) | ≈ 204 Mt: world production of palm, soybean, rapeseed and sunflowerseed oil, 2024/25 | USDA Production, Supply and Distribution (PSD) database [@usdapsd] |
+| Baseline market ($Q_0$) | ≈ 204 Mt: world production of palm, soybean, rapeseed and sunflowerseed oil, 2024/25 | U.S. Department of Agriculture (USDA) Production, Supply and Distribution (PSD) database [@usdapsd] |
 | Oil density, to put $D$ and $Q_0$ in the same units | 0.92 kg/L | ICCT's own soy-oil conversion: 12.4 Mt = 13.5 billion L (0.919 kg/L) [@seber2025, Table A1, p. 7] |
 | Supply elasticity ($\varepsilon_s$) | `r fmt_el(eps_s_rs)` (low end `r fmt_el(rs_low$eps_s)`, high end `r fmt_el(rs_high$eps_s)`) | @roberts2013 [Table 1, p. 2279]: about the average of their six specifications, which range from `r fmt_el(min(rs_specs$eps_s))` to `r fmt_el(max(rs_specs$eps_s))` |
 | Demand elasticity ($\varepsilon_d$) | `r fmt_el(eps_d_rs)` (low end `r fmt_el(rs_low$eps_d)`, high end `r fmt_el(rs_high$eps_d)`) | @roberts2013 [Table 1, p. 2279]: about the average of their six specifications, which range from `r fmt_el(max(rs_specs$eps_d))` to `r fmt_el(min(rs_specs$eps_d))` |
@@ -1003,7 +1004,7 @@ Only two of the model's 17 crops produce vegetable oil: palm, which is priced pe
 | Model crop | Shock | Why | Source |
 |---|---|---|---|
 | Palm oil | $\%\Delta P$ | The model prices palm as oil | — |
-| Soybeans | $s \times \%\Delta P$, with $s = 0.353$ | Oil is only part of a soybean's value, and we hold the meal price fixed. $s = \$4.72 / (\$4.72 + \$8.66)$, from the 2007–2025 average per-bushel values of soybean oil and meal | @janzen2025 [Fig. 2] (USDA AMS Illinois plant prices; 11 lb oil and 48 lb meal per bushel) |
+| Soybeans | $s \times \%\Delta P$, with $s = 0.353$ | Oil is only part of a soybean's value, and we hold the meal price fixed. $s = \$4.72 / (\$4.72 + \$8.66)$, from the 2007–2025 average per-bushel values of soybean oil and meal | @janzen2025 [Fig. 2] (USDA Agricultural Marketing Service Illinois plant prices; 11 lb oil and 48 lb meal per bushel) |
 | Rapeseed/canola, sunflower | not modeled | Not among the model's crops | — |
 
 : How the oil-price shock enters the emLab model. {#tbl-crop-mapping}
@@ -1022,7 +1023,7 @@ Starting from 2020 tree cover, the model steps forward one year at a time until 
 
 All runs use a carbon price of zero, and BAU uses 2020 prices. The primary run raises palm oil prices by `r fmt1(shock_2035$pct_delta_p_rs)`% and soybean prices by `r fmt1(soy_oil_value_share * shock_2035$pct_delta_p_rs)`%. Two additional runs apply this shock to palm and soybeans separately, in order to split the loss by crop. For the sensitivity analysis, two more runs repeat the primary run using the price shocks at the low and high ends of Roberts & Schlenker's estimates (`r fmt1(shock_2035$pct_delta_p_rs_low)`% and `r fmt1(shock_2035$pct_delta_p_rs_high)`% for palm; see [Results](#sec-results-price)). Prices jump once in the first model year and stay at that level. Model year 2035 therefore means 15 years after the shock, rather than the calendar year 2035.
 
-Forest carbon (t CO₂) is tree cover multiplied by carbon density, and forest area (ha) is carbon divided by density, using the model's own conversion. We count lost forest carbon as emissions, which leaves out peat, soil carbon, and lost future sequestration. As a sanity check, the model has `r fmt0(sum(bau$area_bau[bau$year == 2020]) / 1e6)` Mha of forest in 2020, which is `r fmt0(100 * sum(bau$area_bau[bau$year == 2020]) / 4.06e9)`% of FAO's 4.06 billion ha [@fao2020fra, p. 1]. Note that the two sources define forest differently.
+Forest carbon (t CO₂) is tree cover multiplied by carbon density, and forest area (ha) is carbon divided by density, using the model's own conversion. We count lost forest carbon as emissions, which leaves out peat, soil carbon, and lost future sequestration. As a sanity check, the model has `r fmt0(sum(bau$area_bau[bau$year == 2020]) / 1e6)` Mha of forest in 2020, which is `r fmt0(100 * sum(bau$area_bau[bau$year == 2020]) / 4.06e9)`% of the 4.06 billion ha estimated by the Food and Agriculture Organization of the United Nations [@fao2020fra, p. 1]. Note that the two sources define forest differently.
 
 We use the model's input data without modification, and summarize its results by country and by 0.5° grid square. Map outlines are from Natural Earth's 1:110m countries dataset [@naturalearth].
 
