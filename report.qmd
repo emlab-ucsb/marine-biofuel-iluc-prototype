@@ -916,6 +916,146 @@ DT::datatable(
 
 Because cleared forest never grows back, BAU can later clear forest that a shocked run cleared earlier. In Malaysia the extra loss peaks at `r fmt0(mys$peak / 1e6)` Mt CO₂ in model year `r mys$peak_year` and falls to `r fmt0(mys$final / 1e6)` Mt CO₂ by `r final_year`, and `r n_narrowing` countries end more than 5% below their peak. Globally the extra loss is still rising at the end of the run. The ILUC estimates only count loss within the accounting period, so this late catch-up doesn't affect them.
 
+#### Forest area cleared {#sec-results-area}
+
+The same results in hectares of forest cleared rather than tonnes of CO₂.
+
+```{r}
+#| label: fig-forest-loss-area-grid-map
+#| column: body-outset
+#| fig-width: 10
+#| fig-height: 5.2
+#| fig-cap: "Cumulative additional forest area cleared in the primary scenario over the full horizon, per 0.5° grid square. Gray squares have modeled forest but less than 10 ha of additional loss."
+
+area_grid_classes <- c("< 10", "10–100", "100–1,000", "1,000–5,000", "5,000–10,000", "10,000–25,000", "≥ 25,000")
+grid$area_class <- factor(
+  cut(grid$loss_vo_rs_ha, c(-Inf, 10, 100, 1000, 5000, 10000, 25000, Inf), right = FALSE, labels = area_grid_classes),
+  levels = area_grid_classes
+)
+
+ggplot2::ggplot() +
+  ggplot2::geom_polygon(
+    data = basemap,
+    ggplot2::aes(lon, lat, group = piece, subgroup = ring),
+    fill = col_land, colour = col_surface, linewidth = 0.2
+  ) +
+  ggplot2::geom_tile(data = grid, ggplot2::aes(lon, lat, fill = area_class), width = 0.5, height = 0.5) +
+  ggplot2::scale_fill_manual(
+    values = stats::setNames(c("#d6d4cc", map_ramp(6)), area_grid_classes),
+    name = "Additional forest cleared (ha per square)",
+    drop = FALSE,
+    guide = ggplot2::guide_legend(nrow = 1, title.position = "top", label.position = "bottom", keywidth = ggplot2::unit(1.6, "cm"), keyheight = ggplot2::unit(0.3, "cm"))
+  ) +
+  ggplot2::coord_quickmap(xlim = c(-180, 180), ylim = c(-57, 84), expand = FALSE) +
+  theme_map()
+```
+
+```{r}
+#| label: fig-forest-loss-area-country-map
+#| column: body-outset
+#| fig-width: 10
+#| fig-height: 5.2
+#| fig-cap: "Cumulative additional forest area cleared in the primary scenario over the full horizon, by country. Gray countries have no additional loss or are not in the model. Where the model pools neighboring countries into one region, each member shows the region's total."
+
+# Additional area cleared by country over the full horizon, with each country's share of the total and
+# the carbon per hectare of the extra loss.
+area_final <- rs_final |>
+  dplyr::mutate(area_share = area_loss / sum(area_loss), t_per_ha = carbon_loss / area_loss) |>
+  dplyr::filter(area_loss > 0) |>
+  dplyr::arrange(dplyr::desc(area_loss))
+
+area_country_classes <- c("< 1", "1–10", "10–100", "100–500", "500–1,000", "≥ 1,000")
+area_country_map <- area_final |>
+  dplyr::transmute(
+    model_country = country,
+    class = factor(
+      cut(area_loss / 1e3, c(-Inf, 1, 10, 100, 500, 1000, Inf), right = FALSE, labels = area_country_classes),
+      levels = area_country_classes
+    )
+  )
+basemap_area <- dplyr::left_join(basemap, area_country_map, by = "model_country")
+
+ggplot2::ggplot(mapping = ggplot2::aes(lon, lat, group = piece, subgroup = ring)) +
+  ggplot2::geom_polygon(data = basemap, fill = col_land, colour = col_surface, linewidth = 0.2) +
+  ggplot2::geom_polygon(
+    data = dplyr::filter(basemap_area, !is.na(class)),
+    ggplot2::aes(fill = class),
+    colour = col_surface, linewidth = 0.2
+  ) +
+  ggplot2::scale_fill_manual(
+    values = stats::setNames(map_ramp(6), area_country_classes),
+    name = "Additional forest cleared (thousand ha)",
+    drop = FALSE,
+    guide = ggplot2::guide_legend(nrow = 1, title.position = "top", label.position = "bottom", keywidth = ggplot2::unit(1.6, "cm"), keyheight = ggplot2::unit(0.3, "cm"))
+  ) +
+  ggplot2::coord_quickmap(xlim = c(-180, 180), ylim = c(-57, 84), expand = FALSE) +
+  theme_map()
+```
+
+```{r}
+#| label: fig-forest-loss-area-by-crop
+#| fig-width: 7.5
+#| fig-height: 5.2
+#| fig-cap: "Cumulative additional forest area cleared over the full horizon in the primary scenario, by country, split between the palm-only and soy-only runs."
+
+area_top <- area_final$country[seq_len(top_n)]
+area_other <- sprintf("Other %d countries", nrow(area_final) - top_n)
+
+area_by_crop <- country_final |>
+  dplyr::filter(scenario %in% c("vo_rs_palm", "vo_rs_soy")) |>
+  dplyr::mutate(
+    label = ifelse(country %in% area_top, country, area_other),
+    crop = ifelse(scenario == "vo_rs_palm", "Oil palm", "Soybeans")
+  ) |>
+  dplyr::summarise(kha = sum(area_loss) / 1e3, .by = c(label, crop)) |>
+  dplyr::mutate(label = factor(label, levels = rev(c(area_top, area_other))))
+area_bar_totals <- area_by_crop |> dplyr::summarise(kha = sum(kha), .by = label)
+
+ggplot2::ggplot(area_by_crop, ggplot2::aes(kha, label)) +
+  ggplot2::geom_col(
+    ggplot2::aes(fill = crop),
+    position = ggplot2::position_stack(reverse = TRUE), # palm first, from zero
+    width = 0.62, colour = col_surface, linewidth = 0.4
+  ) +
+  ggplot2::geom_text(data = area_bar_totals, ggplot2::aes(label = fmt0(kha)), hjust = -0.2, size = 3.2, colour = "#0b0b0b") +
+  ggplot2::scale_fill_manual(values = col_crop, name = NULL) +
+  ggplot2::scale_x_continuous(labels = scales::label_comma(), expand = ggplot2::expansion(mult = c(0, 0.1))) +
+  ggplot2::labs(
+    title = "Additional forest area cleared by country and crop",
+    subtitle = "Primary scenario, full horizon",
+    x = "Thousand ha",
+    y = NULL
+  ) +
+  theme_report() +
+  ggplot2::theme(panel.grid.major.y = ggplot2::element_blank())
+```
+
+```{r}
+#| label: area-numbers
+#| include: false
+
+# Numbers for the text: how area and carbon rank the countries, and carbon per hectare among the ten
+# countries with the most additional area cleared.
+carbon_rank <- stats::setNames(seq_len(nrow(rs_final)), rs_final$country)
+top10_area <- area_final[seq_len(10), ]
+lowest_density <- top10_area[which.min(top10_area$t_per_ha), ]
+highest_density <- top10_area[which.max(top10_area$t_per_ha), ]
+# Countries among the top_n by area that rank at least three places higher by area than by carbon.
+rank_up <- area_final$country[seq_len(top_n)][
+  seq_len(top_n) + 3 <= carbon_rank[area_final$country[seq_len(top_n)]]
+]
+rank_up_text <- if (length(rank_up) > 0) {
+  paste0(
+    " By area, ", knitr::combine_words(the_country(rank_up)),
+    if (length(rank_up) == 1) " ranks" else " rank", " at least three places higher than by carbon."
+  )
+} else {
+  ""
+}
+```
+
+Over the full horizon the primary scenario clears `r fmt1(sum(rs_final$area_loss) / 1e6)` Mha more forest than BAU. `r sub("^the ", "The ", the_country(area_final$country[1]))`, `r the_country(area_final$country[2])` and `r the_country(area_final$country[3])` account for `r fmt0(100 * sum(area_final$area_share[1:3]))`% of it. Area and carbon rank countries differently, because the extra forest cleared holds `r fmt0(sum(rs_final$carbon_loss) / sum(rs_final$area_loss))` t CO₂ per hectare on average, but `r fmt0(lowest_density$t_per_ha)` in `r the_country(lowest_density$country)` and `r fmt0(highest_density$t_per_ha)` in `r the_country(highest_density$country)`, the extremes among the ten countries that clear the most.`r rank_up_text` The country split has the same caveats as the carbon results ([Appendix C](#sec-crop-mix)).
+
 ### ILUC carbon intensity {#sec-results-iluc}
 
 ```{r}
@@ -1097,9 +1237,9 @@ Every change we made to emLab's land-use model to run the price scenarios, for t
 
 15. Reduces `02`'s per-pixel results to two files for the report, pairing each result file with its chunk file for each pixel's `country` and `CF`:
     - `data/derived/land_use_country_results.csv.gz`: country × scenario × year totals of forest carbon (`sum(biomass)`, t CO₂) and forest area (`sum(biomass / CF)`, ha, using upstream's `ha_per_pixel = CF_pix / CF`).
-    - `data/derived/land_use_grid_loss.csv.gz`: per 0.5° grid square (from `grid_smry.csv` coordinates), 2020 forest carbon and final-year additional loss relative to BAU for each scenario.
+    - `data/derived/land_use_grid_loss.csv.gz`: per 0.5° grid square (from `grid_smry.csv` coordinates), 2020 forest carbon and final-year additional loss relative to BAU for each scenario, as carbon (t CO₂) and as forest area (ha, `biomass / CF`).
 
-    Stops if BAU 2020 forest carbon doesn't match `01`'s `grid_smry.csv`, or if any scenario's gridded loss doesn't sum to its country-level loss.
+    Stops if BAU 2020 forest carbon doesn't match `01`'s `grid_smry.csv`, or if any scenario's gridded carbon or area loss doesn't sum to its country-level loss.
 
 **`run_pipeline.R`**
 
@@ -1118,7 +1258,7 @@ Earlier versions of this list had items 17–19: a script that traced the model'
 - At every pixel, biomass in 2035 and 2171 is never higher under a shock than under BAU.
 - `vo_rs_low` and `vo_rs_high`: at every pixel, biomass in 2035 and 2171 is never higher under `vo_rs_high` than under `vo_rs`, nor under `vo_rs` than under `vo_rs_low`. Adding them left every country × year total of the existing scenarios unchanged.
 - `vo_rs_palm` and `vo_rs_soy` sum to `vo_rs` to within 0.11% of its additional loss 15 years after the shock, and to within 0.02% at the end of the horizon.
-- `03_summarise_results.R`: BAU 2020 forest carbon summed by country equals `01`'s per-pixel 2020 biomass, and each scenario's gridded loss equals its country-level loss.
+- `03_summarise_results.R`: BAU 2020 forest carbon summed by country equals `01`'s per-pixel 2020 biomass, and each scenario's gridded carbon and area loss equal its country-level loss.
 - Rerun on 3 November 2026 without `vo_rs_model` and with items 17–19 reverted: every country × scenario × year forest carbon and area total for the remaining seven scenarios (163,856 rows), and every gridded carbon loss, is identical to the previous run.
 - Runtime on a 64 GB laptop, seven scenarios: `01` 266 s, `02` 160 s, `03_summarise_results.R` 48 s. Peak memory was ~31 GB in `01` when last measured, with eight scenarios.
 
