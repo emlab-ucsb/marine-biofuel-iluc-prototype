@@ -100,12 +100,15 @@ q0_mt <- sum(psd_four_oils$production_mt) # ~204 Mt
 ::: {.callout-warning}
 ## Preliminary and exploratory
 
-This is a prototype. Its numbers show the likely scale of the effect. They are not estimates for policy, regulation or carbon accounting, and they will change as the work develops. Four things matter most:
+This is a prototype, and its numbers will change as the work develops. Use them for the likely scale of ILUC from ICCT's projected marine vegetable-oil demand, and to compare with published ILUC values. Don't use them as an ILUC factor in policy, regulation or carbon accounting, as a forecast of vegetable-oil prices, or to assign emissions to particular countries.
 
-- The price shock that drives everything else comes from a simple formula meant for small changes, while marine demand would equal `r fmt0(shock_2035$demand_share_pct)`% of today's world vegetable-oil production.
-- The supply and demand elasticities in that formula are Roberts & Schlenker's estimates for staple crops, not vegetable oils.
+The main caveats:
+
+- The price shock that drives everything else comes from a simple formula meant for small changes, while marine demand would equal `r fmt0(shock_2035$demand_share_pct)`% of today's world vegetable-oil production. Its supply and demand elasticities are Roberts & Schlenker's estimates for staple crops, not vegetable oils.
+- The shock puts palm at `r fmt1(1 + shock_2035$pct_delta_p_rs / 100)` times its 2020 price, and the land-use model, estimated on 2001–2020 data, is untested at prices this high. The model predicts forest clearing, not what the land is then used for, and we count all of it as ILUC.
 - Country results are the least reliable part. We apply one world price everywhere, and the land-use model's broad crop zones send some of the palm response to Central Africa.
-- We count only carbon in forest biomass. Peat and soil carbon are missing, so on this count our ILUC values are too low.
+- We count only carbon in forest biomass, not peat or soil, and the model has no rapeseed or sunflower, so on these counts our ILUC values are too low. We make no allowance for soybean meal, which makes them too high.
+- Our range covers only the spread across Roberts & Schlenker's estimates, not these other uncertainties.
 
 The [Caveats](#sec-caveats) section has the full list.
 :::
