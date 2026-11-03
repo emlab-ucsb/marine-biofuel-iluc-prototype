@@ -218,7 +218,7 @@ ICCT projects that virgin vegetable-oil demand for marine biofuel starts in `r m
 #| column: body-outset
 #| fig-width: 10
 #| fig-height: 4.2
-#| fig-cap: "Vegetable oil for marine biofuel projected by ICCT (left) and the resulting change in vegetable-oil prices (right), by year. Bar labels give demand as a share of current world production of the four major vegetable oils. The price change uses Roberts & Schlenker's central elasticities (line), and the band spans the low and high ends of their estimates. The land-use model runs use the 2035 values."
+#| fig-cap: "Vegetable oil for marine biofuel projected by ICCT (left) and the resulting change in vegetable-oil prices (right), by year. The price change uses Roberts & Schlenker's central elasticities (line), and the band spans the low and high ends of their estimates. The land-use model runs use the 2035 values."
 
 # Two panels sharing the year axis: demand (bars) and the price change it implies (line and band).
 panel_names <- c(
@@ -229,8 +229,7 @@ demand_panel <- price_shock |>
   dplyr::transmute(
     year,
     panel = factor(panel_names[1], levels = panel_names),
-    value = vo_demand_billion_liters,
-    label = ifelse(value > 0, paste0(fmt0(demand_share_pct), "%"), "")
+    value = vo_demand_billion_liters
   )
 price_panel <- price_shock |>
   dplyr::transmute(
@@ -243,10 +242,6 @@ price_panel <- price_shock |>
 
 ggplot2::ggplot(mapping = ggplot2::aes(year, value)) +
   ggplot2::geom_col(data = demand_panel, fill = col_primary, width = 0.65) +
-  ggplot2::geom_text(
-    data = demand_panel, ggplot2::aes(label = label),
-    vjust = -0.5, size = 3.1, colour = "#0b0b0b"
-  ) +
   ggplot2::geom_ribbon(data = price_panel, ggplot2::aes(ymin = low, ymax = high), fill = col_range, alpha = 0.6) +
   ggplot2::geom_line(data = price_panel, colour = col_primary, linewidth = 0.8) +
   ggplot2::geom_point(
