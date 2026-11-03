@@ -75,18 +75,6 @@ country_final <- loss |>
   dplyr::mutate(share = carbon_loss / sum(carbon_loss), .by = scenario) |>
   dplyr::arrange(scenario, dplyr::desc(carbon_loss))
 rs_final <- country_final |> dplyr::filter(scenario == "vo_rs")
-# Countries whose additional loss peaks and then narrows by >5% (BAU later clears some of the
-# same forest), among those with more than 1 Mt CO2 of additional loss.
-gap_peaks <- loss |>
-  dplyr::filter(scenario == "vo_rs") |>
-  dplyr::summarise(
-    peak = max(carbon_loss),
-    peak_year = year[which.max(carbon_loss)],
-    final = carbon_loss[year == final_year],
-    .by = country
-  )
-n_narrowing <- sum(gap_peaks$peak > 1e6 & gap_peaks$final < 0.95 * gap_peaks$peak)
-mys <- gap_peaks[gap_peaks$country == "Malaysia", ]
 
 # ILUC carbon intensity: additional forest carbon loss after T years of fuel use, divided by T
 # years of VO-RD energy at the 2035 level. Annual VO-RD energy is ICCT's 2035 VO-RD share of

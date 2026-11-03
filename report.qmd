@@ -182,11 +182,11 @@ Overall, this prototype shows that emLab's land-use model can be used to estimat
 
 ## Approach {#sec-approach}
 
-ILUC occurs when biofuel demand raises crop prices, and these higher prices lead to forest being cleared for farmland elsewhere. These emissions fall outside of the fuel's own supply chain, so a fuel mix can meet the framework's greenhouse-gas intensity targets on paper while still adding emissions that are not counted. @fig-steps shows how we estimate these emissions, and who supplies each step.
+ILUC occurs when biofuel demand raises crop prices, and these higher prices lead to forest being cleared for farmland elsewhere. These emissions fall outside of the fuel's own supply chain, so a fuel mix can meet the framework's greenhouse-gas intensity targets on paper while still adding emissions that are not counted. @fig-steps shows how we estimate these emissions, and the source or model used for each step.
 
 ```{mermaid}
 %%| label: fig-steps
-%%| fig-cap: "From the IMO Net-Zero Framework to an ILUC carbon intensity: the steps, and who supplies each."
+%%| fig-cap: "From the IMO Net-Zero Framework to an ILUC carbon intensity: the steps in our analysis, and the source or model used for each step."
 flowchart LR
   A["IMO Net-Zero Framework"] --> F["Marine VO-RD demand<br/><i>ICCT cost-optimization</i>"]
   F --> B["Virgin vegetable-oil demand<br/><i>1.22 kg oil per kg renewable diesel</i>"]
@@ -199,8 +199,8 @@ The analysis consists of five steps:
 
 1. Translate ICCT's 2035 vegetable-oil demand into a price shock, using Roberts & Schlenker's central supply and demand elasticities.
 2. Translate the price shock into prices for the emLab model's crops.
-3. Run the model with baseline prices and with shocked prices (both with a carbon price of zero), and take the difference in forest loss.
-4. Spread the additional emissions over the fuel used, giving a value in g CO₂ per MJ.
+3. Run the model with baseline prices and with shocked prices, and take the difference in forest loss.
+4. Divide the additional emissions by the energy in the VO-RD used over an accounting period (`r headline_years` years for our headline value). This gives the ILUC carbon intensity of VO-RD (also called an ILUC factor or ILUC value) in g CO₂ per MJ of fuel, which can be added to the fuel's direct life-cycle carbon intensity.
 5. For the sensitivity analysis, repeat steps 1–4 using the low and high ends of Roberts & Schlenker's estimates.
 
 Similar to Chen et al., we estimate how much the demand shift raises prices, and then use an econometric land-use model to translate prices into forest loss. This differs from approaches that assume a fixed ILUC factor. [Appendix A](#background) provides more background on the IMO Net-Zero Framework and published ILUC estimates, and [Appendix B](#methods-and-assumptions) describes each step in detail.
@@ -525,8 +525,6 @@ DT::datatable(
 
 `r sum(rs_final$carbon_loss > 0)` countries lose some additional forest. However, `r the_country(rs_final$country[1])`, `r the_country(rs_final$country[2])`, and `r the_country(rs_final$country[3])` account for `r fmt0(100 * sum(rs_final$share[1:3]))`% of the total. Only grid cells that grow oil palm or soybeans respond, since those are the only crop prices that change.
 
-Since cleared forest never grows back in the model, forest that is cleared early in a shocked run can instead be cleared later in the BAU run. In Malaysia, for example, the additional loss peaks at `r fmt0(mys$peak / 1e6)` Mt CO₂ in model year `r mys$peak_year` and falls to `r fmt0(mys$final / 1e6)` Mt CO₂ by `r final_year`. Overall, `r n_narrowing` countries end more than 5% below their peak. Globally, the additional loss is still increasing at the end of the run. The ILUC estimates only count loss within the accounting period, so this late catch-up does not affect them.
-
 #### Forest area cleared {#sec-results-area}
 
 This section shows the same results in terms of hectares of forest cleared, rather than tonnes of CO₂.
@@ -536,11 +534,21 @@ This section shows the same results in terms of hectares of forest cleared, rath
 #| column: body-outset
 #| fig-width: 10
 #| fig-height: 5.2
-#| fig-cap: "Cumulative additional forest area cleared in the primary scenario over the full horizon, per 0.5° grid square. Gray squares have modeled forest but less than 10 ha of additional loss."
+#| fig-cap: "Cumulative additional forest area cleared in the primary scenario over the full horizon, as a share of each 0.5° grid square's area (1% equals 1 ha per km²). Square areas include any water. Gray squares have modeled forest but less than 0.01% of their area cleared."
 
-area_grid_classes <- c("< 10", "10–100", "100–1,000", "1,000–5,000", "5,000–10,000", "10,000–25,000", "≥ 25,000")
+# Area cleared as a share of each grid square's area. A 0.5-degree square shrinks toward the poles; its
+# area on a sphere is R^2 * d_lon * (sin(lat_north) - sin(lat_south)), with R the mean Earth radius
+# (6,371.0088 km). Hectares per km2 equal percent of area (1 km2 = 100 ha).
+earth_radius_km <- 6371.0088
+deg_to_rad <- pi / 180
+grid$square_km2 <- earth_radius_km^2 * (0.5 * deg_to_rad) *
+  (sin((grid$lat + 0.25) * deg_to_rad) - sin((grid$lat - 0.25) * deg_to_rad))
+stopifnot("Grid square areas must be positive" = all(grid$square_km2 > 0))
+grid$pct_area_cleared <- grid$loss_vo_rs_ha / grid$square_km2
+
+area_grid_classes <- c("< 0.01", "0.01–0.1", "0.1–0.5", "0.5–1", "1–2.5", "2.5–5", "≥ 5")
 grid$area_class <- factor(
-  cut(grid$loss_vo_rs_ha, c(-Inf, 10, 100, 1000, 5000, 10000, 25000, Inf), right = FALSE, labels = area_grid_classes),
+  cut(grid$pct_area_cleared, c(-Inf, 0.01, 0.1, 0.5, 1, 2.5, 5, Inf), right = FALSE, labels = area_grid_classes),
   levels = area_grid_classes
 )
 
@@ -553,7 +561,7 @@ ggplot2::ggplot() +
   ggplot2::geom_tile(data = grid, ggplot2::aes(lon, lat, fill = area_class), width = 0.5, height = 0.5) +
   ggplot2::scale_fill_manual(
     values = stats::setNames(c("#d6d4cc", map_ramp(6)), area_grid_classes),
-    name = "Additional forest cleared (ha per square)",
+    name = "Additional forest cleared (% of square's area)",
     drop = FALSE,
     guide = ggplot2::guide_legend(nrow = 1, title.position = "top", label.position = "bottom", keywidth = ggplot2::unit(1.6, "cm"), keyheight = ggplot2::unit(0.3, "cm"))
   ) +
@@ -1010,13 +1018,13 @@ Rapeseed and sunflower are not in the model, so their land-use response is missi
 
 ### The emLab land-use model {#sec-land-use-model}
 
-We use emLab's global deforestation model [@emlablanduse] without changes, except that its scenarios set crop prices rather than carbon prices.
+We use emLab's global deforestation model [@emlablanduse] without changes, except that we set the crop prices in its scenarios.
 
 The model is a statistical model of the share of each grid cell's forest cleared each year, as a function of the cell's potential agricultural revenue and its remaining tree cover. It is estimated using 2001–2020 data (29.1 million cell-years). It controls for each cell's fixed characteristics and for conditions in each country and year (i.e., a fractional logit with cell and country-by-year fixed effects). A cell's revenue is the crop price minus transport cost, multiplied by attainable yield. Revenue is averaged across the 17 crops based on their share of harvested area in the cell's agro-ecological zone, and converted to a present value using a 5% discount rate. Transport cost scales with travel time to port and the crude oil price.
 
 Starting from 2020 tree cover, the model steps forward one year at a time until 2171, across 1,450,769 grid cells (1/12°, about 9 km across) in 154 countries. Country effects are held at their 2016–2020 average, and cleared forest never grows back.
 
-All runs use a carbon price of zero, and BAU uses 2020 prices. The primary run raises palm oil prices by `r fmt1(shock_2035$pct_delta_p_rs)`% and soybean prices by `r fmt1(soy_oil_value_share * shock_2035$pct_delta_p_rs)`%. Two additional runs apply this shock to palm and soybeans separately, in order to split the loss by crop. For the sensitivity analysis, two more runs repeat the primary run using the price shocks at the low and high ends of Roberts & Schlenker's estimates (`r fmt1(shock_2035$pct_delta_p_rs_low)`% and `r fmt1(shock_2035$pct_delta_p_rs_high)`% for palm; see [Results](#sec-results-price)). Prices jump once in the first model year and stay at that level. Model year 2035 therefore means 15 years after the shock, rather than the calendar year 2035.
+BAU uses 2020 prices. The primary run raises palm oil prices by `r fmt1(shock_2035$pct_delta_p_rs)`% and soybean prices by `r fmt1(soy_oil_value_share * shock_2035$pct_delta_p_rs)`%. Two additional runs apply this shock to palm and soybeans separately, in order to split the loss by crop. For the sensitivity analysis, two more runs repeat the primary run using the price shocks at the low and high ends of Roberts & Schlenker's estimates (`r fmt1(shock_2035$pct_delta_p_rs_low)`% and `r fmt1(shock_2035$pct_delta_p_rs_high)`% for palm; see [Results](#sec-results-price)). Prices jump once in the first model year and stay at that level. Model year 2035 therefore means 15 years after the shock, rather than the calendar year 2035.
 
 Forest carbon (t CO₂) is tree cover multiplied by carbon density, and forest area (ha) is carbon divided by density, using the model's own conversion. We count lost forest carbon as emissions, which leaves out peat, soil carbon, and lost future sequestration. As a sanity check, the model has `r fmt0(sum(bau$area_bau[bau$year == 2020]) / 1e6)` Mha of forest in 2020, which is `r fmt0(100 * sum(bau$area_bau[bau$year == 2020]) / 4.06e9)`% of the 4.06 billion ha estimated by the Food and Agriculture Organization of the United Nations [@fao2020fra, p. 1]. Note that the two sources define forest differently.
 
