@@ -106,7 +106,7 @@ q0_mt <- sum(psd_four_oils$production_mt) # ~204 Mt
 ::: {.callout-warning}
 ## Preliminary and exploratory
 
-This is a prototype, and its numbers will change as the work develops. Use them for the likely scale of ILUC from ICCT's projected marine vegetable-oil demand, and to compare with published ILUC values. Don't use them as an ILUC factor in policy, regulation or carbon accounting, as a forecast of vegetable-oil prices, or to assign emissions to particular countries.
+This is an exploratory prototype. It looks at the potential of emLab's land-use model for forecasting the ILUC impacts of rising biofuel demand, with ICCT's projected marine vegetable-oil demand as a test case. Its numbers are a first look at the likely scale of that ILUC, useful for comparing with published ILUC values. Don't use them as an ILUC factor in policy, regulation or carbon accounting, as a forecast of vegetable-oil prices, or to assign emissions to particular countries.
 
 The main caveats:
 
