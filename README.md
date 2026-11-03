@@ -7,10 +7,13 @@ This repository contains a report documenting a protype proof-of-concept analysi
 The rendered analysis report is hosted on GitHub Pages:
 **https://emlab-ucsb.github.io/marine-biofuel-iluc-prototype/**
 
+Technical notes for coauthors and collaborators:
+**https://emlab-ucsb.github.io/marine-biofuel-iluc-prototype/technical-notes.html**
+
 The site has two pages:
 
 - `report.qmd`, the report for ICCT. It is the site's home page.
-- `technical-notes.qmd`, technical notes for collaborators: every change we made to emLab's land-use model, the first test run, and our questions for the model's authors. Nothing in the report links to it, so share its link directly. The page is unlisted, not private: anyone with the link, or anyone browsing this public repository, can find it.
+- `technical-notes.qmd`, the technical notes linked above: every change we made to emLab's land-use model, the first test run, and our questions for the model's authors. Nothing in the report links to it, so share its link directly. The page is unlisted, not private: anyone with the link, or anyone browsing this public repository, can find it.
 
 The report's emLab and UCSB logos are in `images/`, and `partials/title-block.html` places them above its title.
 
