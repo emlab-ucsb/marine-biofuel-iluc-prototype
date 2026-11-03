@@ -1,6 +1,6 @@
 #################################
 # audit_crop_mix.R
-# Evidence for report.qmd Appendix C: the land-use model's crop mix (harvested_share_gaez)
+# Evidence for technical-notes.qmd (#sec-crop-mix): the land-use model's crop mix (harvested_share_gaez)
 #################################
 #
 # Reads the land-use model's inputs (read-only, via r/land_use_model/paths.R) and this repo's model

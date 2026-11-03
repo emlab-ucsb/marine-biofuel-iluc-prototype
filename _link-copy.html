@@ -1,0 +1,34 @@
+<!-- Figures and tables are cross-referenced (fig-/tbl- labels), so each has a link (page.html#fig-...).
+     This moves each one's link icon from after the whole figure or table into its caption, where it
+     shows on hover, and makes clicking any link icon (headings too) copy the full link. -->
+<style>
+  #link-copied { position: fixed; bottom: 1.5rem; left: 50%; transform: translateX(-50%); padding: 0.4rem 0.9rem; border-radius: 0.3rem; background: #212529; color: #fff; font-size: 0.875rem; opacity: 0; transition: opacity 0.2s; pointer-events: none; z-index: 2000; }
+  #link-copied.show { opacity: 1; }
+</style>
+<script>
+window.addEventListener("load", () => {
+  document.querySelectorAll("div.quarto-float[id^='fig-'], div.quarto-float[id^='tbl-']").forEach((float) => {
+    const caption = float.querySelector("figcaption");
+    const link = float.querySelector(":scope > a.anchorjs-link");
+    if (caption && link) {
+      link.title = "Copy link";
+      caption.appendChild(link);
+    }
+  });
+});
+document.addEventListener("click", (event) => {
+  const link = event.target.closest("a.anchorjs-link");
+  if (!link || !navigator.clipboard) return;
+  navigator.clipboard.writeText(link.href).then(() => {
+    let toast = document.getElementById("link-copied");
+    if (!toast) {
+      toast = document.createElement("div");
+      toast.id = "link-copied";
+      toast.textContent = "Link copied";
+      document.body.appendChild(toast);
+    }
+    toast.classList.add("show");
+    setTimeout(() => toast.classList.remove("show"), 1500);
+  }, () => {});
+});
+</script>

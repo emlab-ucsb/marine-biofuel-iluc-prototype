@@ -5,7 +5,12 @@ on:
     branches: [main]
     paths:
       - 'report.qmd'
+      - 'technical-notes.qmd'
+      - 'r/report_setup.R'
       - '_quarto.yml'
+      - '_link-copy.html'
+      - 'references.bib'
+      - 'apa.csl'
       - 'renv.lock'
       - 'data/**'
       - '.github/workflows/render-report.yml'

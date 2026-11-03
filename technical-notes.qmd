@@ -1,0 +1,284 @@
+---
+title: "Technical notes for collaborators"
+subtitle: "ILUC implications of marine biofuel demand: prototype analysis"
+authors: Environmental Markets Lab (emLab), University of California, Santa Barbara (UCSB)
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 2
+    code-fold: true
+    theme: cosmo
+    embed-resources: false
+    fig-dpi: 150
+    # Unlisted: the report doesn't link here, and search engines are asked not to index it.
+    include-in-header:
+      text: <meta name="robots" content="noindex, nofollow">
+execute:
+  message: false
+  warning: false
+bibliography: references.bib
+csl: apa.csl # APA 7th edition (citationstyles.org), which prints page locators as "p."
+---
+
+```{r}
+#| label: setup
+#| include: false
+
+# Data, headline numbers, formatting helpers and figure theme, shared with report.qmd.
+source(file.path("r", "report_setup.R"), local = knitr::knit_global())
+```
+
+These notes go with the [report for ICCT](report.html). They are for the authors of emLab's land-use model and other collaborators: every change we made to the model's code, the first test run, and our questions about how we use the model. The report doesn't link here, so share this page directly.
+
+## Changes to the emLab model code {#sec-lum-changes}
+
+Every change we made to emLab's land-use model to run the price scenarios, for the model's authors to check. Starting point: upstream `emlab-ucsb/land-based-solutions`, `r/robert_test/parallelization/` at commit `e207c2b` (31 July 2026), copied to `r/land_use_model/` (see `r/land_use_model/PROVENANCE.md`). Anything not listed is unchanged.
+
+**Unchanged:** `simulation_functions.R` (including `update_revenues()` and `simulate_10_dt()`), `packages.R`, `r/directories.R` (now only read from, via `paths.R`), the deforestation model and its coefficients, and the fixed-effect construction (pixel FEs, the 2016–2020 country-year FE window, asymmetric-information FEs).
+
+**All scripts**
+
+1. `r/robert_test/parallelization/` → `r/land_use_model/` in every `here::here()` path.
+
+**New file: `paths.R`**
+
+2. Defines the input root `input_wdir`, read via `r/directories.R` as `{data_directory}/parallelized` and treated as read-only, and the output root `wdir`, the repo's git-ignored `land_use_model_runs/`. It stops if `wdir` is inside any Nextcloud folder or inside the inputs. This is so our outputs can't sync over the shared Nextcloud files of the same name.
+
+**`01_prepare_data.R`**
+
+3. Carbon price fixed at 0: `CP_LIST` (10 carbon prices) replaced by `CP <- 0`.
+4. New input `PRICE_SHOCKS` (Section 1): % price change per shocked crop, one element per scenario, with `bau` first and unshocked. Scenarios: `bau`; `vo_20pct` (smoke test, `Oil, palm` and `Soybeans` both +20%); `vo_rs`, built from the 2035 shock read from `data/derived/vegetable_oil_price_shock_2035.csv` (`pct_delta_p_rs`, from Roberts & Schlenker's central supply and demand elasticities), with `Oil, palm` taking the full shock and `Soybeans` taking `SOY_OIL_VALUE_SHARE` (0.353, Janzen & Wang 2025) of it; `vo_rs_palm` and `vo_rs_soy`, the `vo_rs` shock applied to one crop at a time, for crop attribution; and `vo_rs_low` and `vo_rs_high`, the same mapping applied to the CSV's `pct_delta_p_rs_low` and `pct_delta_p_rs_high`, the low and high ends of Roberts & Schlenker's estimates, for a sensitivity analysis. The script stops if those two columns are missing. Sources for every number are in [the report's Methods](report.html#sec-mapping). (Earlier versions also ran `vo_central`, `vo_high` and `vo_rs_model`, with other elasticities; all three have been dropped.)
+5. New Section 2b: expands `PRICE_SHOCKS` into `PRICE_SCENARIOS`, one full 17-crop price vector per scenario, starting from the `CPrice == 0` rows of `final_prices_allcp`. Writes `price_scenarios.csv`. Stops if a shocked crop isn't in the model, or if any crop in `endo_input_data` has no price.
+6. Section 6: `update_revenues()` runs once per price scenario (`revenue_<scenario>` columns) instead of once per carbon price (`revenue_cp<P>`). BAU revenue is computed the same way instead of being taken from `data_past$revenue`, so every scenario uses one formula. The two BAU versions agree to ~1e-12, and the script prints that check on every run.
+7. Section 8: chunk files carry `revenue_<scenario>` columns in place of `revenue_cp0` and `revenue_cp<P>`.
+8. Section 8: the per-pixel attributes file `grid_smry.csv` also carries `lat` and `lon`, for mapping.
+9. Section 11: `model_params.rds` stores `cp` and `price_scenarios` in place of `cp_list`.
+10. Paths come from `paths.R` instead of the hard-coded `/Users/rheilmayr/Nextcloud/...` `wdir`, which upstream used for both inputs and outputs.
+
+**`02_run_simulations.R`**
+
+11. The 38 distinct simulations (56 labeled blocks across endog/exog, fi/fi_bl_vp/ai_bl_vp and carbon price) are replaced by one `simulate_10_dt()` run per price scenario, at `cp = 0` with `pixel_fe`. This is the same construction as upstream's `endog_fi_blvp` runs, $D(0, V(P))$, with scenario prices in place of carbon-price equilibrium prices.
+12. Output parquet columns are `scn, pixel_id, year, biomass` (upstream: `crp_price, cprice, pixel_id, year, info, biomass`). The row-count check is now pixels × scenarios × years.
+13. Paths come from `paths.R`, as in `01`.
+
+**Disabled scripts**
+
+14. `00_generate_sample_data.R`, `00c_run_cobweb.R`, `01b_prepare_uncertainty_draws.R`, `02b_run_simulations_uncertainty.R`, and `03_aggregate_results.R` through `09_conceptual_diagrams.R` (including `03b`) have a `stop()` as their first line. They still expect upstream's carbon-price outputs and use upstream's hard-coded paths, which on a colleague's machine point at the shared Nextcloud folder. `00` and `00c` write into `1_input/` itself. Each `stop()` comes out only when that script is adapted to `paths.R`.
+
+**New file: `03_summarise_results.R`**
+
+15. Reduces `02`'s per-pixel results to two files for the report, pairing each result file with its chunk file for each pixel's `country` and `CF`:
+    - `data/derived/land_use_country_results.csv.gz`: country × scenario × year totals of forest carbon (`sum(biomass)`, t CO₂) and forest area (`sum(biomass / CF)`, ha, using upstream's `ha_per_pixel = CF_pix / CF`).
+    - `data/derived/land_use_grid_loss.csv.gz`: per 0.5° grid square (from `grid_smry.csv` coordinates), 2020 forest carbon and final-year additional loss relative to BAU for each scenario, as carbon (t CO₂) and as forest area (ha, `biomass / CF`).
+
+    Stops if BAU 2020 forest carbon doesn't match `01`'s `grid_smry.csv`, or if any scenario's gridded carbon or area loss doesn't sum to its country-level loss.
+
+**`run_pipeline.R`**
+
+16. `STAGES` runs `01` → `02` → `03_summarise_results.R`; upstream stages `03`–`07` are commented out.
+
+Earlier versions of this list had items 17–19: a script that traced the model's own supply curves (`00d_supply_curve.R`), and per-pixel crop output in `01` and `03` for a check of how much oil the cleared land grows. We have dropped both analyses, deleted the script and reverted the code.
+
+**Verification** (200-pixel sample inputs, `1_input/smpl`):
+
+- BAU emissions per pixel, annualized the same way as `03`'s `bl_emit_co2_y`, match upstream's reference run (`5_validation/sim_results_exog_ref_smpl.csv`) to within 0.003% for all 201 pixels.
+- `vo_20pct` biomass is never higher than BAU, and is lower in the 110 of 201 pixels that grow palm or soy.
+
+**Verification** (full inputs, `1_input/full`, 1,450,769 pixels):
+
+- BAU revenue recomputed with `update_revenues()` matches upstream's `data_past$revenue` to within 7e-12.
+- At every pixel, biomass in 2035 and 2171 is never higher under a shock than under BAU.
+- `vo_rs_low` and `vo_rs_high`: at every pixel, biomass in 2035 and 2171 is never higher under `vo_rs_high` than under `vo_rs`, nor under `vo_rs` than under `vo_rs_low`. Adding them left every country × year total of the existing scenarios unchanged.
+- `vo_rs_palm` and `vo_rs_soy` sum to `vo_rs` to within 0.11% of its additional loss 15 years after the shock, and to within 0.02% at the end of the horizon.
+- `03_summarise_results.R`: BAU 2020 forest carbon summed by country equals `01`'s per-pixel 2020 biomass, and each scenario's gridded carbon and area loss equal its country-level loss.
+- Rerun on 3 November 2026 without `vo_rs_model` and with items 17–19 reverted: every country × scenario × year forest carbon and area total for the remaining seven scenarios (163,856 rows), and every gridded carbon loss, is identical to the previous run.
+- Runtime on a 64 GB laptop, seven scenarios: `01` 266 s, `02` 160 s, `03_summarise_results.R` 48 s. Peak memory was ~31 GB in `01` when last measured, with eight scenarios.
+
+## The +20% test run {#sec-test-run}
+
+The first run the model's authors asked for: palm and soybean prices both up 20% (soybeans by the full 20%, without the oil-share adjustment), at a zero carbon price and otherwise as in [the report's Methods](report.html#sec-land-use-model). It tests how the model responds; it is not a policy scenario.
+
+```{r}
+#| label: tbl-test-run-global
+
+test_global <- lum |>
+  dplyr::filter(scenario %in% c("bau", "vo_20pct")) |>
+  dplyr::summarise(
+    carbon = sum(forest_carbon_tco2),
+    area = sum(forest_area_ha),
+    .by = c(scenario, year)
+  ) |>
+  dplyr::arrange(scenario, year)
+test_bau <- test_global[test_global$scenario == "bau", ]
+test_shock <- test_global[test_global$scenario == "vo_20pct", ]
+stopifnot(identical(test_bau$year, test_shock$year))
+
+base_year <- min(lum$year)
+test_rows <- match(c(base_year + 1, 2035, 2050, final_year), test_bau$year)
+bau_loss <- test_bau$carbon[test_bau$year == base_year] - test_bau$carbon[test_rows]
+extra_loss <- test_bau$carbon[test_rows] - test_shock$carbon[test_rows]
+
+knitr::kable(
+  data.frame(
+    "Years after shock" = test_bau$year[test_rows] - base_year,
+    "BAU forest carbon loss (Gt CO₂)" = bau_loss / 1e9,
+    "Additional loss, +20% (Gt CO₂)" = extra_loss / 1e9,
+    "Additional loss, +20% (Mha)" = (test_bau$area[test_rows] - test_shock$area[test_rows]) / 1e6,
+    "Additional as % of BAU loss (CO₂)" = 100 * extra_loss / bau_loss,
+    check.names = FALSE
+  ),
+  digits = c(0, 1, 3, 2, 2),
+  caption = "+20% test run: cumulative forest carbon loss under BAU and additional loss from the price increase, all countries."
+)
+```
+
+BAU loses `r fmt1(bau_loss[1] / 1e9)` Gt CO₂ of forest carbon in the first year, close to the ~4.2 Gt noted in a comment in upstream's `01_prepare_data.R` (Section 5). The 20% increase adds `r fmt1(100 * extra_loss[2] / bau_loss[2])`% to BAU's cumulative loss over 15 years. The share shrinks over longer horizons because BAU loss keeps accumulating while the extra loss levels off.
+
+```{r}
+#| label: tbl-test-run-countries
+
+test_countries <- lum |>
+  dplyr::filter(scenario %in% c("bau", "vo_20pct"), year %in% c(2035, final_year)) |>
+  dplyr::select(country, scenario, year, forest_carbon_tco2) |>
+  dplyr::summarise(
+    extra_mt = (forest_carbon_tco2[scenario == "bau"] - forest_carbon_tco2[scenario == "vo_20pct"]) / 1e6,
+    .by = c(country, year)
+  )
+test_top <- dplyr::inner_join(
+  test_countries |> dplyr::filter(year == 2035) |> dplyr::select(country, extra_15 = extra_mt),
+  test_countries |> dplyr::filter(year == final_year) |> dplyr::select(country, extra_full = extra_mt),
+  by = "country"
+) |>
+  dplyr::mutate(share_pct = 100 * extra_full / sum(extra_full)) |>
+  dplyr::arrange(dplyr::desc(extra_full)) |>
+  utils::head(10)
+
+knitr::kable(
+  test_top,
+  digits = 1,
+  col.names = c("Country", "Additional loss, 15 years (Mt CO₂)", "Additional loss, full horizon (Mt CO₂)", "Share of global (%)"),
+  caption = "+20% test run: the ten countries with the largest additional forest carbon loss."
+)
+```
+
+## Questions for the emLab model's authors {#sec-crop-mix}
+
+This section is for the authors of emLab's land-use model. We want to confirm that we are using the model correctly, and we are not suggesting any change to it. The model was built for carbon prices, which compete with a cell's total agricultural revenue. We use it to shock just two crops, palm oil and soybeans, so how the model splits a cell's revenue among crops matters much more for us. Our four questions are [at the end](#sec-lum-questions).
+
+```{r}
+#| label: crop-mix-data
+
+# Written by r/audit_crop_mix.R from the model's inputs (read-only) and this repository's model run.
+cm_num <- utils::read.csv(file.path("data", "derived", "crop_mix_numbers.csv"))
+cm <- function(metric) cm_num$value[cm_num$metric == metric]
+cm_regions <- utils::read.csv(file.path("data", "derived", "crop_mix_regions.csv"))
+cm_countries <- utils::read.csv(file.path("data", "derived", "crop_mix_countries.csv"))
+cm_grid <- utils::read.csv(file.path("data", "derived", "crop_mix_grid.csv.gz"))
+pct <- function(x) paste0(formatC(100 * x, format = "f", digits = 1), "%")
+
+# Share of the extra forest the primary scenario clears that the model counts as cropland
+# (def_for_ag_share), weighted by area.
+cropland <- utils::read.csv(file.path("data", "derived", "crop_mix_cropland_share.csv"))
+cropland_pct <- function(scope, yrs) {
+  100 * cropland$cropland_share[
+    cropland$scope == scope & cropland$weight == "vo_rs extra clearing" & cropland$years %in% yrs
+  ]
+}
+```
+
+### The crop mix
+
+- **The crop mix is set per zone.** Each cell's revenue (`update_revenues()`) and crop production (`endog_prices()`) weight crops by `harvested_share_gaez`. That share is the same for every cell with the same `gaez` value (`r fmt0(cm("gaez_zones"))` values, such as `54_Europe`). We assume this gives forest cells, which have little cropland of their own, the crop mix of the wider area.
+- **For palm and soybeans, that mix differs a lot from the frontiers' own.** We look at four frontiers where palm or soybeans already make up much of the cropland: Riau, a province in central Sumatra, Indonesia, and Sabah and Sarawak, the Malaysian states on Borneo, for palm; and Mato Grosso, Brazil, and the Paraguayan Chaco for soybeans. For each crop's actual share of a cell's cropland we use the inputs' `m3_harvested_area_ha` column. We assume it comes from M3 [@monfreda2008], a global map of harvested area and yield for 175 crops around 2000, on a grid of about 10 km. In Riau, palm is `r pct(cm_regions$palm_share_m3[1])` of M3 harvested area but `r pct(cm_regions$palm_share_median[1])` of the model's crop mix, and no cell anywhere gets more than `r pct(cm("palm_share_max"))` (@tbl-crop-mix-frontiers). Palm is also more than 5% of the crop mix in `r fmt0(cm_countries$cells_palm_over_5pct[cm_countries$country == "Democratic Republic of the Congo"])` cells in the Democratic Republic of the Congo (@fig-crop-mix-map).
+- **This shapes our country results.** A cell's revenue weights each crop's price by its share of the crop mix, so a palm price rise adds less revenue, and causes less clearing, where palm's share is small. As we use the model, the zone-level mix thins the palm response in the palm frontiers and spreads it into Central Africa. That probably explains why the Democratic Republic of the Congo has the most additional loss in our results.
+
+```{r}
+#| label: tbl-crop-mix-frontiers
+
+frontier_crop <- c("Palm", "Palm", "Soybeans", "Soybeans")
+knitr::kable(
+  data.frame(
+    "Frontier" = sub(" \\(.*", "", cm_regions$region),
+    "Crop" = frontier_crop,
+    "Share of crop mix, model" = pct(ifelse(frontier_crop == "Palm", cm_regions$palm_share_median, cm_regions$soy_share_median)),
+    "Share of harvested area, M3" = pct(ifelse(frontier_crop == "Palm", cm_regions$palm_share_m3, cm_regions$soy_share_m3)),
+    check.names = FALSE
+  ),
+  align = "llrr",
+  caption = paste(
+    "The frontier crop's share in four frontiers. Model: harvested_share_gaez (median cell).",
+    "M3: the crop's share of all 17 crops' M3 harvested area (m3_harvested_area_ha) in the same cells."
+  )
+)
+```
+
+```{r}
+#| label: fig-crop-mix-map
+#| column: body-outset
+#| fig-width: 10
+#| fig-height: 8.6
+#| fig-cap: "Palm's share of the crop mix in each 0.5° square: as the model uses it (harvested_share_gaez, averaged over the square's cells), and from M3 harvested area in the same cells."
+
+share_classes <- c("0", "< 1%", "1–5%", "5–10%", "10–20%", "20–50%", "≥ 50%", "No M3 cropland")
+share_class <- function(x) {
+  cls <- as.character(cut(x, c(0, 0.01, 0.05, 0.10, 0.20, 0.50, Inf), right = FALSE, labels = share_classes[2:7]))
+  factor(ifelse(is.na(x), "No M3 cropland", ifelse(x == 0, "0", cls)), levels = share_classes)
+}
+map_panels <- c(model = "Crop mix the model uses (harvested_share_gaez, set per GAEZ zone)", m3 = "M3 harvested area in the same cells")
+palm_map <- rbind(
+  data.frame(lon = cm_grid$lon, lat = cm_grid$lat, panel = map_panels[["model"]], class = share_class(cm_grid$palm_share_model)),
+  data.frame(lon = cm_grid$lon, lat = cm_grid$lat, panel = map_panels[["m3"]], class = share_class(cm_grid$palm_share_m3))
+)
+palm_map$panel <- factor(palm_map$panel, levels = map_panels)
+
+ggplot2::ggplot() +
+  ggplot2::geom_polygon(
+    data = basemap,
+    ggplot2::aes(lon, lat, group = piece, subgroup = ring),
+    fill = col_land, colour = col_surface, linewidth = 0.2
+  ) +
+  ggplot2::geom_tile(data = palm_map, ggplot2::aes(lon, lat, fill = class), width = 0.5, height = 0.5) +
+  ggplot2::facet_wrap(~panel, ncol = 1) +
+  ggplot2::scale_fill_manual(
+    values = stats::setNames(c("#e6e4dc", map_ramp(6), "#a9a79f"), share_classes),
+    breaks = share_classes,
+    name = "Palm share of the crop mix",
+    drop = FALSE,
+    guide = ggplot2::guide_legend(nrow = 1, title.position = "top", label.position = "bottom", keywidth = ggplot2::unit(1.6, "cm"), keyheight = ggplot2::unit(0.3, "cm"))
+  ) +
+  ggplot2::coord_quickmap(xlim = c(-180, 180), ylim = c(-57, 84), expand = FALSE) +
+  theme_map() +
+  ggplot2::theme(strip.text = ggplot2::element_text(colour = "#0b0b0b", hjust = 0))
+```
+
+### Reading the results
+
+We count all the extra forest the model clears as ILUC, whatever the land is used for afterwards. The model itself counts only part of it as cropland: in each cell, the share of its 2000–2020 forest loss that became cropland or palm (`def_for_ag_share`). Weighted by area, that is `r fmt0(cropland_pct("All countries", 1))`% of the extra forest the primary scenario clears in its first year and `r fmt0(cropland_pct("All countries", 25))`% after 25 years: `r fmt0(cropland_pct("Indonesia", 25))`% in Indonesia and `r fmt0(cropland_pct("Malaysia", 25))`% in Malaysia, but `r fmt1(cropland_pct("Democratic Republic of the Congo", 25))`% in the Democratic Republic of the Congo.
+
+The primary shock also puts palm at `r fmt1(1 + shock_2035$pct_delta_p_rs / 100)` times its 2020 price. Over the range of our sensitivity runs the model's response is close to proportional: from the low end to the high end, the price shock rises `r fmt0(100 * (shock_2035$pct_delta_p_rs_high / shock_2035$pct_delta_p_rs_low - 1))`% and the `r headline_years`-year carbon loss `r fmt0(100 * (il("vo_rs_high", headline_years) / il("vo_rs_low", headline_years) - 1))`% ([report](report.html#sec-results-sensitivity)).
+
+Until we hear back, we caution against reading our country results as a map of where palm-driven deforestation would happen.
+
+### Our questions {#sec-lum-questions}
+
+On the crop mix:
+
+1. Is a price change for individual crops, like ours, a use of the model you would expect to work, given that the crop mix is set per GAEZ zone?
+2. Given the crop mix, would you report our results by country, or only as global totals?
+
+On reading the results:
+
+3. Is it right to count all the extra forest the model clears as ILUC, even though the model counts only `r fmt0(cropland_pct("All countries", 25))`% of it as cropland after 25 years?
+4. Are you comfortable using the model's response at palm prices `r fmt1(1 + shock_2035$pct_delta_p_rs / 100)` times the 2020 level?
+
+`r/audit_crop_mix.R` reproduces every number here from the unmodified inputs and this repository's model run.
+
+## Use of generative AI
+
+We used Claude (Anthropic, model Opus 5.5) through Claude Code as a coding and writing assistant. It drafted and edited much of the R code, including the changes to the emLab model listed above, and much of these notes' prose. We set the research question and scenarios, chose the data sources and key assumptions, and reviewed the code and text. We are responsible for all code, analysis and conclusions. Every number, figure and table here is computed by the code in the [GitHub repository](https://github.com/emlab-ucsb/marine-biofuel-iluc-prototype) when the page is built.
+
+## References
+
+::: {#refs}
+:::
