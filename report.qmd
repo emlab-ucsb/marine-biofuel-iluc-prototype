@@ -182,11 +182,11 @@ Overall, this prototype shows that emLab's land-use model can be used to estimat
 
 ## Approach {#sec-approach}
 
-ILUC occurs when biofuel demand raises crop prices, and these higher prices lead to forest being cleared for farmland elsewhere. These emissions fall outside of the fuel's own supply chain, so a fuel mix can meet the framework's greenhouse-gas intensity targets on paper while still adding emissions that are not counted. @fig-steps shows how we estimate these emissions, and who supplies each step.
+ILUC occurs when biofuel demand raises crop prices, and these higher prices lead to forest being cleared for farmland elsewhere. These emissions fall outside of the fuel's own supply chain, so a fuel mix can meet the framework's greenhouse-gas intensity targets on paper while still adding emissions that are not counted. @fig-steps shows how we estimate these emissions, and the source or model used for each step.
 
 ```{mermaid}
 %%| label: fig-steps
-%%| fig-cap: "From the IMO Net-Zero Framework to an ILUC carbon intensity: the steps, and who supplies each."
+%%| fig-cap: "From the IMO Net-Zero Framework to an ILUC carbon intensity: the steps in our analysis, and the source or model used for each step."
 flowchart LR
   A["IMO Net-Zero Framework"] --> F["Marine VO-RD demand<br/><i>ICCT cost-optimization</i>"]
   F --> B["Virgin vegetable-oil demand<br/><i>1.22 kg oil per kg renewable diesel</i>"]
