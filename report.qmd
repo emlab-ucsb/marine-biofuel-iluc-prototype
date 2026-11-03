@@ -166,7 +166,7 @@ The [Caveats](#sec-caveats) section provides the full list.
 
 ## Executive summary
 
-In April 2025, the International Maritime Organization (IMO) approved a draft Net-Zero Framework that would set greenhouse-gas intensity targets for the fuel used by large ships, and would charge ships that miss those targets [@sturrup2026, p. 1; @seber2025, pp. 1–2]. The framework has not yet been adopted. A vote was postponed in October 2025, and a vote could happen as soon as 4 December 2026 [@carbonbrief2026; @abs2026mepc84, p. 4]. The framework only counts the direct life-cycle emissions of fuels. ILUC, which is the forest cleared elsewhere when biofuel demand raises crop prices, is instead handled through a qualitative approach [@imo2024lca, paras. 4.12–4.13]. ICCT projects that the least-cost compliance pathway relies heavily on renewable diesel made from virgin vegetable oil (VO-RD), which would reach 46% of shipping energy by 2035 [@seber2025, p. 4 and Table 1, p. 5].
+In April 2025, the International Maritime Organization (IMO) approved a draft Net-Zero Framework that would set greenhouse-gas intensity targets for the fuel used by large ships, and would charge ships that miss those targets [@sturrup2026, p. 1; @seber2025, pp. 1–2]. The framework has not yet been adopted. A vote was postponed in October 2025, and a vote could happen as soon as 4 December 2026 [@carbonbrief2026; @abs2026mepc84, p. 4]. The framework would only count the direct life-cycle emissions of fuels. ILUC, which is the forest cleared elsewhere when biofuel demand raises crop prices, would instead be handled through a qualitative approach [@imo2024lca, paras. 4.12–4.13]. ICCT projects that the least-cost compliance pathway would rely heavily on renewable diesel made from virgin vegetable oil (VO-RD), which would reach 46% of shipping energy by 2035 [@seber2025, p. 4 and Table 1, p. 5].
 
 This analysis finds a central ILUC estimate for marine VO-RD of `r fmt1(il("vo_rs", 25))` g CO₂ per MJ, when spread over `r headline_years` years of fuel use (`r fmt1(il("vo_rs", 20))` over 20 years and `r fmt1(il("vo_rs", 30))` over 30 years). Our sensitivity analysis, described below, gives a range of `r fmt1(il("vo_rs_low", 25))` to `r fmt1(il("vo_rs_high", 25))` g CO₂/MJ (@tbl-iluc-sensitivity). Adding VO-RD's direct life-cycle emissions of `r vord_direct_ci` g CO₂e/MJ [@seber2025, p. 6] gives a total of `r fmt1(vord_direct_ci + il("vo_rs", 25))` g/MJ, compared with a fossil baseline of `r fossil_baseline_ci`.
 
@@ -182,7 +182,7 @@ Overall, this prototype shows that emLab's land-use model can be used to estimat
 
 ## Approach {#sec-approach}
 
-ILUC occurs when biofuel demand raises crop prices, and these higher prices lead to forest being cleared for farmland elsewhere. These emissions fall outside of the fuel's own supply chain, so a fuel mix can meet the framework's greenhouse-gas intensity targets on paper while still adding emissions that are not counted. @fig-steps shows how we estimate these emissions, and the source or model used for each step.
+ILUC occurs when biofuel demand raises crop prices, and these higher prices lead to forest being cleared for farmland elsewhere. These emissions fall outside of the fuel's own supply chain, so they are not reflected in the fuel's direct life-cycle carbon intensity. @fig-steps shows how we estimate these emissions, and the source or model used for each step.
 
 ```{mermaid}
 %%| label: fig-steps
@@ -375,12 +375,22 @@ About half of the full-run loss (`r fmt0(100 * gl("vo_rs", 2035, "carbon_loss") 
 #| column: body-outset
 #| fig-width: 10
 #| fig-height: 5.2
-#| fig-cap: "Cumulative additional forest carbon loss in the primary scenario over the full horizon, per 0.5° grid square. Gray squares have modeled forest but less than 1 kt CO₂ of additional loss."
+#| fig-cap: "Cumulative additional forest carbon loss in the primary scenario over the full horizon, per km² of each 0.5° grid square. Square areas include any water. Gray squares have modeled forest but less than 1 t CO₂ per km² of additional loss."
 
 grid <- utils::read.csv(file.path("data", "derived", "land_use_grid_loss.csv.gz"))
-grid_classes <- c("< 1", "1–10", "10–100", "100–500", "500–1,000", "1,000–2,500", "≥ 2,500")
+
+# Both grid maps divide by each square's area, since a 0.5-degree square shrinks toward the poles. On a
+# sphere its area is R^2 * d_lon * (sin(lat_north) - sin(lat_south)), with R the mean Earth radius
+# (6,371.0088 km).
+earth_radius_km <- 6371.0088
+deg_to_rad <- pi / 180
+grid$square_km2 <- earth_radius_km^2 * (0.5 * deg_to_rad) *
+  (sin((grid$lat + 0.25) * deg_to_rad) - sin((grid$lat - 0.25) * deg_to_rad))
+stopifnot("Grid square areas must be positive" = all(grid$square_km2 > 0))
+
+grid_classes <- c("< 1", "1–10", "10–100", "100–250", "250–500", "500–1,000", "≥ 1,000")
 grid$class <- factor(
-  cut(grid$loss_vo_rs_tco2 / 1e3, c(-Inf, 1, 10, 100, 500, 1000, 2500, Inf), right = FALSE, labels = grid_classes),
+  cut(grid$loss_vo_rs_tco2 / grid$square_km2, c(-Inf, 1, 10, 100, 250, 500, 1000, Inf), right = FALSE, labels = grid_classes),
   levels = grid_classes
 )
 
@@ -393,7 +403,7 @@ ggplot2::ggplot() +
   ggplot2::geom_tile(data = grid, ggplot2::aes(lon, lat, fill = class), width = 0.5, height = 0.5) +
   ggplot2::scale_fill_manual(
     values = stats::setNames(c("#d6d4cc", map_ramp(6)), grid_classes),
-    name = expression("Additional loss (kt CO"[2] * " per square)"),
+    name = expression("Additional loss (t CO"[2] * " per km"^2 * ")"),
     drop = FALSE,
     guide = ggplot2::guide_legend(nrow = 1, title.position = "top", label.position = "bottom", keywidth = ggplot2::unit(1.6, "cm"), keyheight = ggplot2::unit(0.3, "cm"))
   ) +
@@ -536,14 +546,8 @@ This section shows the same results in terms of hectares of forest cleared, rath
 #| fig-height: 5.2
 #| fig-cap: "Cumulative additional forest area cleared in the primary scenario over the full horizon, as a share of each 0.5° grid square's area (1% equals 1 ha per km²). Square areas include any water. Gray squares have modeled forest but less than 0.01% of their area cleared."
 
-# Area cleared as a share of each grid square's area. A 0.5-degree square shrinks toward the poles; its
-# area on a sphere is R^2 * d_lon * (sin(lat_north) - sin(lat_south)), with R the mean Earth radius
-# (6,371.0088 km). Hectares per km2 equal percent of area (1 km2 = 100 ha).
-earth_radius_km <- 6371.0088
-deg_to_rad <- pi / 180
-grid$square_km2 <- earth_radius_km^2 * (0.5 * deg_to_rad) *
-  (sin((grid$lat + 0.25) * deg_to_rad) - sin((grid$lat - 0.25) * deg_to_rad))
-stopifnot("Grid square areas must be positive" = all(grid$square_km2 > 0))
+# Area cleared as a share of each grid square's area (square_km2, from the carbon map chunk).
+# Hectares per km2 equal percent of area (1 km2 = 100 ha).
 grid$pct_area_cleared <- grid$loss_vo_rs_ha / grid$square_km2
 
 area_grid_classes <- c("< 0.01", "0.01–0.1", "0.1–0.5", "0.5–1", "1–2.5", "2.5–5", "≥ 5")
@@ -821,13 +825,13 @@ This range only captures the spread across Roberts & Schlenker's specifications.
 
 ### The IMO Net-Zero Framework
 
-In April 2025, the International Maritime Organization approved draft amendments to Annex VI of the International Convention for the Prevention of Pollution from Ships (MARPOL) [@sturrup2026, p. 1] that would set greenhouse-gas fuel-intensity (GFI) targets for ships of 5,000 gross tonnage and above. GFI is measured in well-to-wake g CO₂e/MJ, relative to a 2008 baseline of 93.3 [@seber2025, p. 1]. The Base target tightens from a 4% reduction in 2028 to a 30% reduction by 2035, while the stricter Direct Compliance target tightens from 17% to 43%. Ships above the Base target pay \$380 per tonne of excess CO₂e (Tier 2), and ships between the two targets pay \$100 per tonne (Tier 1) [@seber2025, pp. 1–2].
+In April 2025, the International Maritime Organization approved draft amendments to Annex VI of the International Convention for the Prevention of Pollution from Ships (MARPOL) [@sturrup2026, p. 1] that would set greenhouse-gas fuel-intensity (GFI) targets for ships of 5,000 gross tonnage and above. GFI would be measured in well-to-wake g CO₂e/MJ, relative to a 2008 baseline of 93.3 [@seber2025, p. 1]. The Base target would tighten from a 4% reduction in 2028 to a 30% reduction by 2035, while the stricter Direct Compliance target would tighten from 17% to 43%. Ships above the Base target would pay \$380 per tonne of excess CO₂e (Tier 2), and ships between the two targets would pay \$100 per tonne (Tier 1) [@seber2025, pp. 1–2].
 
-As of October 2026, the framework has not been adopted. At an extraordinary session in October 2025, a Saudi Arabian motion to adjourn for one year passed with 57 votes, including 15 countries that had supported the framework in April [@carbonbrief2026]. The IMO's Marine Environment Protection Committee (MEPC) met for its 84th session (MEPC 84) from 27 April to 1 May 2026. It kept the April 2025 text as the basis for further work, invited alternative proposals, and scheduled two more meetings of its Intersessional Working Group on Reduction of Greenhouse Gas Emissions from Ships (ISWG-GHG) [@carbonbrief2026; @abs2026mepc84, p. 4]. The first of these meetings, ISWG-GHG 22 (1–4 September 2026), ended without agreement [@shipandbunker2026]. The largest disagreement is over the greenhouse-gas (GHG) price and the central IMO fund it would pay into. According to one observer's count of the countries that spoke, 38 supported the price and fund and 17 (mostly oil producers) opposed them, while the United States again rejected any IMO-run fund [@shipandbunker2026]. The early GFI trajectory and the rules for pooling compliance surpluses are also unresolved [@maritimeexecutive2026]. Japan's proposal to replace the fund with direct payments from shipowners received little support in September [@maritimeexecutive2026]. Its revised proposal drops the fund and instead has ships cover shortfalls by buying surplus units from other ships [@marineinsight2026].
+As of October 2026, the framework has not been adopted. At an extraordinary session in October 2025, member states voted to adjourn for one year [@carbonbrief2026]. The IMO's Marine Environment Protection Committee (MEPC) met for its 84th session (MEPC 84) from 27 April to 1 May 2026. It kept the April 2025 text as the basis for further work, invited alternative proposals, and scheduled two more meetings of its Intersessional Working Group on Reduction of Greenhouse Gas Emissions from Ships (ISWG-GHG) [@carbonbrief2026; @abs2026mepc84, p. 4]. The first of these meetings, ISWG-GHG 22 (1–4 September 2026), ended without agreement [@shipandbunker2026]. Open issues include the greenhouse-gas (GHG) price and the central IMO fund it would pay into, the early GFI trajectory, and the rules for pooling compliance surpluses [@shipandbunker2026; @maritimeexecutive2026].
 
 The working group meets again 23–27 November, followed by MEPC 85 (30 November–3 December). If MEPC 85 agrees, the extraordinary session will resume on 4 December 2026 and could vote that day [@abs2026mepc84, p. 4; @shipandbunker2026]. Whatever is adopted may differ from the April 2025 text that this analysis is based on. For example, a less stringent early trajectory would mean less biofuel demand, and dropping the GHG price would change the compliance costs that determine the fuel mix.
 
-The framework only considers the direct life-cycle emissions of fuels. The IMO's life-cycle guidelines consider ILUC too uncertain to assign each fuel a value, and instead handle it through a qualitative, risk-based approach [@imo2024lca, paras. 4.12–4.13]. MEPC 84 supported this approach in principle and asked for more quantitative analysis by MEPC 85 [@abs2026mepc84, p. 6]. Since blending biofuel costs less than the \$380 Tier 2 penalty, the least-cost strategy is to blend just enough biofuel to meet the Base target. In ICCT's least-cost mix, used-cooking-oil renewable diesel (UCO-RD) runs out at about 5% of shipping energy, and virgin vegetable-oil renewable diesel (VO-RD) covers the rest, reaching 46% of shipping energy by 2035 [@seber2025, p. 4 and Table 1, p. 5].
+The framework would only consider the direct life-cycle emissions of fuels. The IMO's life-cycle guidelines consider ILUC too uncertain to assign each fuel a value, and instead handle it through a qualitative, risk-based approach [@imo2024lca, paras. 4.12–4.13]. MEPC 84 supported this approach in principle and asked for more quantitative analysis by MEPC 85 [@abs2026mepc84, p. 6]. Since blending biofuel would cost less than the \$380 Tier 2 penalty, the least-cost strategy would be to blend just enough biofuel to meet the Base target. In ICCT's least-cost mix, used-cooking-oil renewable diesel (UCO-RD) would run out at about 5% of shipping energy, and virgin vegetable-oil renewable diesel (VO-RD) would cover the rest, reaching 46% of shipping energy by 2035 [@seber2025, p. 4 and Table 1, p. 5].
 
 ICCT's Table 1 gives the fuel mix for each year from 2028 to 2035. We read this table directly from the ICCT PDF. Its last column, virgin vegetable-oil feedstock, is the demand shift we use in this analysis. ICCT converts renewable diesel to vegetable oil at a rate of 1.22 kg of oil per kg of fuel [@seber2025, p. 3, note 9].
 
