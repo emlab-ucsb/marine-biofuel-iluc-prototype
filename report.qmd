@@ -199,7 +199,7 @@ The analysis consists of five steps:
 
 1. Translate ICCT's 2035 vegetable-oil demand into a price shock, using Roberts & Schlenker's central supply and demand elasticities.
 2. Translate the price shock into prices for the emLab model's crops.
-3. Run the model with baseline prices and with shocked prices (both with a carbon price of zero), and take the difference in forest loss.
+3. Run the model with baseline prices and with shocked prices, and take the difference in forest loss.
 4. Spread the additional emissions over the fuel used, giving a value in g CO₂ per MJ.
 5. For the sensitivity analysis, repeat steps 1–4 using the low and high ends of Roberts & Schlenker's estimates.
 
@@ -1010,13 +1010,13 @@ Rapeseed and sunflower are not in the model, so their land-use response is missi
 
 ### The emLab land-use model {#sec-land-use-model}
 
-We use emLab's global deforestation model [@emlablanduse] without changes, except that its scenarios set crop prices rather than carbon prices.
+We use emLab's global deforestation model [@emlablanduse] without changes, except that we set the crop prices in its scenarios.
 
 The model is a statistical model of the share of each grid cell's forest cleared each year, as a function of the cell's potential agricultural revenue and its remaining tree cover. It is estimated using 2001–2020 data (29.1 million cell-years). It controls for each cell's fixed characteristics and for conditions in each country and year (i.e., a fractional logit with cell and country-by-year fixed effects). A cell's revenue is the crop price minus transport cost, multiplied by attainable yield. Revenue is averaged across the 17 crops based on their share of harvested area in the cell's agro-ecological zone, and converted to a present value using a 5% discount rate. Transport cost scales with travel time to port and the crude oil price.
 
 Starting from 2020 tree cover, the model steps forward one year at a time until 2171, across 1,450,769 grid cells (1/12°, about 9 km across) in 154 countries. Country effects are held at their 2016–2020 average, and cleared forest never grows back.
 
-All runs use a carbon price of zero, and BAU uses 2020 prices. The primary run raises palm oil prices by `r fmt1(shock_2035$pct_delta_p_rs)`% and soybean prices by `r fmt1(soy_oil_value_share * shock_2035$pct_delta_p_rs)`%. Two additional runs apply this shock to palm and soybeans separately, in order to split the loss by crop. For the sensitivity analysis, two more runs repeat the primary run using the price shocks at the low and high ends of Roberts & Schlenker's estimates (`r fmt1(shock_2035$pct_delta_p_rs_low)`% and `r fmt1(shock_2035$pct_delta_p_rs_high)`% for palm; see [Results](#sec-results-price)). Prices jump once in the first model year and stay at that level. Model year 2035 therefore means 15 years after the shock, rather than the calendar year 2035.
+BAU uses 2020 prices. The primary run raises palm oil prices by `r fmt1(shock_2035$pct_delta_p_rs)`% and soybean prices by `r fmt1(soy_oil_value_share * shock_2035$pct_delta_p_rs)`%. Two additional runs apply this shock to palm and soybeans separately, in order to split the loss by crop. For the sensitivity analysis, two more runs repeat the primary run using the price shocks at the low and high ends of Roberts & Schlenker's estimates (`r fmt1(shock_2035$pct_delta_p_rs_low)`% and `r fmt1(shock_2035$pct_delta_p_rs_high)`% for palm; see [Results](#sec-results-price)). Prices jump once in the first model year and stay at that level. Model year 2035 therefore means 15 years after the shock, rather than the calendar year 2035.
 
 Forest carbon (t CO₂) is tree cover multiplied by carbon density, and forest area (ha) is carbon divided by density, using the model's own conversion. We count lost forest carbon as emissions, which leaves out peat, soil carbon, and lost future sequestration. As a sanity check, the model has `r fmt0(sum(bau$area_bau[bau$year == 2020]) / 1e6)` Mha of forest in 2020, which is `r fmt0(100 * sum(bau$area_bau[bau$year == 2020]) / 4.06e9)`% of the 4.06 billion ha estimated by the Food and Agriculture Organization of the United Nations [@fao2020fra, p. 1]. Note that the two sources define forest differently.
 
