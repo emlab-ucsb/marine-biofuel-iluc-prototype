@@ -151,17 +151,18 @@ if (!isTRUE(all.equal(shock_2035, as.data.frame(handoff_2035), check.attributes 
 ::: {.callout-warning}
 ## Preliminary and exploratory
 
-This is an exploratory prototype analysis. It looks at the potential of using emLab's land-use model [@emlablanduse] to forecast the indirect land-use change (ILUC) impacts of increasing biofuel demand, using ICCT's projected vegetable-oil demand for marine biofuel as a test case. Its results provide a first look at the likely scale of these impacts, and can be compared with published ILUC values. However, they should not be used as an ILUC factor for policy, regulation, or carbon accounting, as a forecast of vegetable-oil prices, or to attribute emissions to specific countries.
+This is an early, exploratory analysis. We wanted to see whether emLab's land-use model [@emlablanduse] could be used to estimate indirect land-use change (ILUC), which is the forest cleared, and carbon released, when biofuel demand pushes up crop prices. We use ICCT's projection of the vegetable oil needed for marine biofuel as a test case. The results give a rough sense of scale and can be compared with other published estimates. They should not be used as an ILUC value for policy, regulation, or carbon accounting, as a forecast of vegetable-oil prices, or to assign emissions to particular countries.
 
-The main caveats are:
+The main limitations are:
 
-- The price shock, which drives all of the results that follow, comes from a simple formula that is meant for small changes in demand. However, vegetable-oil demand for marine biofuel would equal `r fmt0(shock_2035$demand_share_pct)`% of current world vegetable-oil production. The formula also uses Roberts & Schlenker's supply and demand elasticities, which were estimated for staple crops rather than vegetable oils.
-- The price shock raises the palm oil price to `r fmt1(1 + shock_2035$pct_delta_p_rs / 100)` times its 2020 level. Since the land-use model was estimated using 2001–2020 data, its response at prices this high is untested. The model also predicts forest clearing but not what the cleared land is then used for, and we count all of the additional clearing as ILUC.
-- Country-level results are the least reliable part of the analysis. We apply the same world price change in every country, and the land-use model's broad crop zones shift some of the palm response to Central Africa.
-- We only count carbon in forest biomass (i.e., not peat or soil carbon), and the model does not include rapeseed or sunflower. Both of these make our ILUC values too low. On the other hand, we make no adjustment for the value of soybean meal, which makes them too high.
-- Our sensitivity analysis only captures the spread across Roberts & Schlenker's six specifications of supply and demand elasticities. It does not capture these other uncertainties.
+- We estimate how much vegetable-oil prices rise using a simple formula that works best for small changes in demand. Here, vegetable oil for marine biofuel would equal `r fmt0(shock_2035$demand_share_pct)`% of today's world production, which is far from small. The formula also relies on estimates of how farmers and buyers respond to prices that were made for staple crops such as maize, wheat, and rice, not for vegetable oils.
+- The resulting price increase is very large: palm oil would cost `r fmt1(1 + shock_2035$pct_delta_p_rs / 100)` times its 2020 price. The land-use model is based on data from 2001 to 2020, so we do not know how well it works at prices this high.
+- The model predicts how much forest is cleared, but not what the land is then used for. We count all of the extra clearing as caused by biofuel demand.
+- Results for individual countries are the least reliable part of the analysis. We assume prices rise by the same amount everywhere. The model also uses broad regional averages of which crops are grown, which shifts some of the palm oil response away from Southeast Asia and toward Central Africa.
+- We only count the carbon stored in trees, not in peat or soils, and the model does not include rapeseed or sunflower. Both of these make our estimates too low. On the other hand, we do not account for the value of soybean meal, a co-product of soybean oil, which makes them too high.
+- Our range of results only reflects the different estimates in one study (Roberts & Schlenker) of how farmers and buyers respond to prices. It does not reflect the other limitations listed here.
 
-The [Caveats](#sec-caveats) section provides the full list.
+The [Caveats](#sec-caveats) section has the full list.
 :::
 
 ## Executive summary
